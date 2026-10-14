@@ -1,5 +1,7 @@
 # Shreyas Arcade
 
+`index.html` is the source of truth: edit it directly (all games, site UI and account code live in that one file).
+
 Static site on GitHub Pages (https://bobydidnt-collab.github.io/shreyas-arcade/) with Firebase Auth + Firestore.
 
 - Every time an update is pushed, add an entry at the TOP of the `UPDATES` list in `index.html`
