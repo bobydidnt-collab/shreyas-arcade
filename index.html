@@ -3127,6 +3127,589 @@ const HORROR = {
   }
 };
 
+/* ======================= ONLINE (multiplayer) ======================= */
+// Matchmaking queue + live matches in Firestore:
+//   lobby/<game>/waiting/<uid>  {username, since, at, match}
+//   matches/<id>                {game, p:[uid,uid], names, mv, h0, h1, first, n, win, why, sc0, sc1, rm0, rm1, q0, q1, e0, e1, k0, k1, hb0, hb1, at}
+const OL_TURN = 40, OL_GONE = 25, OL_HB = 6000, OL_FRESH = 16000;
+const EMOTES = ['👍', '😂', '😮', '😡', '🔥', 'GG'];
+const olTS = () => firebase.firestore.FieldValue.serverTimestamp();
+const olMs = (t) => (t && t.toMillis ? t.toMillis() : (typeof t === 'number' ? t : 0));
+function olFont(size, w) { const v = getComputedStyle(document.documentElement); return `${w || 800} ${size}px ${(v.getPropertyValue('--body') || 'system-ui').trim() || 'system-ui'}`; }
+function olDisp(size) { return `${size}px ${getComputedStyle(document.documentElement).getPropertyValue('--display')}`; }
+
+// ---------- game rules ----------
+const OL_RULES = {
+  ottt: {
+    board(mv, first) { const b = Array(9).fill(-1); for (let i = 0; i < mv.length; i++) b[+mv[i]] = (first + i) % 2; return b; },
+    legal(b, ch) { return b[+ch] === -1; },
+    winner(b) {
+      const L = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
+      for (const l of L) if (b[l[0]] >= 0 && b[l[0]] === b[l[1]] && b[l[1]] === b[l[2]]) return { w: b[l[0]], line: l };
+      return b.every((v) => v >= 0) ? { w: 2 } : null;
+    },
+    bot(b, me) {
+      const free = b.map((v, i) => (v < 0 ? i : -1)).filter((i) => i >= 0);
+      for (const who of [me, 1 - me]) for (const i of free) { const t = b.slice(); t[i] = who; const r = this.winner(t); if (r && r.w === who) return i; }
+      if (Math.random() < 0.3) return free[Math.floor(Math.random() * free.length)];
+      if (b[4] < 0) return 4;
+      const corners = [0, 2, 6, 8].filter((i) => b[i] < 0); if (corners.length) return corners[Math.floor(Math.random() * corners.length)];
+      return free[Math.floor(Math.random() * free.length)];
+    }
+  },
+  oc4: {
+    board(mv, first) { const b = Array(42).fill(-1); for (let i = 0; i < mv.length; i++) { const k = this.drop(b, +mv[i]); if (k >= 0) b[k] = (first + i) % 2; } return b; },
+    drop(b, col) { for (let r = 5; r >= 0; r--) if (b[r * 7 + col] === -1) return r * 7 + col; return -1; },
+    legal(b, ch) { return this.drop(b, +ch) >= 0; },
+    winner(b) {
+      for (let r = 0; r < 6; r++) for (let c = 0; c < 7; c++) {
+        const p = b[r * 7 + c]; if (p < 0) continue;
+        for (const [dr, dc] of [[0, 1], [1, 0], [1, 1], [1, -1]]) {
+          const line = [r * 7 + c]; let ok = true;
+          for (let k = 1; k < 4; k++) { const rr2 = r + dr * k, cc = c + dc * k; if (rr2 < 0 || rr2 > 5 || cc < 0 || cc > 6 || b[rr2 * 7 + cc] !== p) { ok = false; break; } line.push(rr2 * 7 + cc); }
+          if (ok) return { w: p, line };
+        }
+      }
+      return b.every((v) => v >= 0) ? { w: 2 } : null;
+    },
+    bot(b, me) {
+      const cols = [0, 1, 2, 3, 4, 5, 6].filter((c) => this.drop(b, c) >= 0);
+      const test = (c, who) => { const t = b.slice(); t[this.drop(t, c)] = who; const r = this.winner(t); return r && r.w === who; };
+      for (const c of cols) if (test(c, me)) return c;
+      for (const c of cols) if (test(c, 1 - me)) return c;
+      if (Math.random() < 0.15) return cols[Math.floor(Math.random() * cols.length)];
+      const safe = cols.filter((c) => { const t = b.slice(); t[this.drop(t, c)] = me; const above = this.drop(t, c); if (above < 0) return true; t[above] = 1 - me; const r = this.winner(t); return !(r && r.w === 1 - me); });
+      const pool = safe.length ? safe : cols;
+      let best = pool[0], bs = -1e9;
+      for (const c of pool) { const s = -Math.abs(3 - c) * 2 + Math.random() * 3; if (s > bs) { bs = s; best = c; } }
+      return best;
+    }
+  },
+  orps: { beats: { r: 's', p: 'r', s: 'p' }, need: 3 }
+};
+function rpsScore(h0, h1) {
+  let a = 0, b = 0; const n = Math.min(h0.length, h1.length);
+  for (let i = 0; i < n; i++) { if (OL_RULES.orps.beats[h0[i]] === h1[i]) a++; else if (OL_RULES.orps.beats[h1[i]] === h0[i]) b++; }
+  return [a, b];
+}
+const RPS_ICON = { r: '✊', p: '✋', s: '✌️' }, RPS_NAME = { r: 'Rock', p: 'Paper', s: 'Scissors' };
+
+// ---------- shared online helpers ----------
+function olStats(gid) { const all = store.get('onlineStats', {}); return all[gid] || { w: 0, l: 0, d: 0, bw: 0, bl: 0 }; }
+function olStatAdd(gid, k) { const all = store.get('onlineStats', {}); const s = all[gid] || { w: 0, l: 0, d: 0, bw: 0, bl: 0 }; s[k] = (s[k] || 0) + 1; all[gid] = s; store.set('onlineStats', all); }
+async function olAddWin(gid) {
+  if (!FB.on || !FB.user) return null;
+  const ref = FB.fs.doc(`scores/${gid}/entries/${FB.user.uid}`);
+  try {
+    const v = await FB.fs.runTransaction(async (tx) => {
+      const d = await tx.get(ref); const nv = (d.exists ? d.data().score : 0) + 1;
+      tx.set(ref, { username: FB.username, score: nv, at: Date.now() }); return nv;
+    });
+    FB.mine[gid] = v; if (bests[gid] == null || v > bests[gid]) { bests[gid] = v; store.set('bests', bests); }
+    refreshBoards(); return v;
+  } catch (e) { console.warn('win save failed', e && e.code); return null; }
+}
+
+function makeOnline(gid, env) {
+  const R = OL_RULES[gid], isRps = gid === 'orps';
+  const S = { scr: 'menu', msg: '', q: null, sess: null, btns: [], hover: -1, t: 0, anim: null, bubble: [null, null], flash: 0, err: '' };
+  const uid = () => (FB.user ? FB.user.uid : null);
+  env.score(FB.mine[gid] || 0);
+
+  // ----- queue -----
+  async function joinQueue() {
+    S.err = '';
+    if (!FB.on) { S.err = 'Online play isn’t available right now.'; return; }
+    if (!FB.user) { openAuth('signup', null, () => { if (S.scr === 'menu') joinQueue(); }); return; }
+    if (!FB.username) await waitForProfile();
+    const me = uid();
+    const ref = FB.fs.doc(`lobby/${gid}/waiting/${me}`);
+    const q = S.q = { t0: performance.now(), ref, unsub: null, hb: null, claiming: false, docs: [], others: 0 };
+    S.scr = 'queue';
+    try { await ref.set({ username: FB.username, since: olTS(), at: olTS(), match: null }); }
+    catch (e) { if (S.q === q) { stopQueue(false); S.scr = 'menu'; S.err = e && e.code === 'permission-denied' ? 'Online play is still being switched on. Try again soon!' : 'Couldn’t reach the server. Check your internet.'; } return; }
+    if (S.q !== q) { ref.delete().catch(() => {}); return; }
+    q.unsub = FB.fs.collection(`lobby/${gid}/waiting`).orderBy('since').limit(25).onSnapshot((snap) => {
+      q.docs = snap.docs.map((d) => Object.assign({ id: d.id }, d.data({ serverTimestamps: 'estimate' }))); checkQueue(q);
+    }, () => { if (S.q === q) { stopQueue(true); S.scr = 'menu'; S.err = 'Lost connection to the queue.'; } });
+    q.hb = setInterval(() => { if (S.q !== q) return; ref.update({ at: olTS() }).catch(() => {}); checkQueue(q); }, OL_HB);
+  }
+  function checkQueue(q) {
+    if (S.q !== q) return;
+    const me = uid(), mine = q.docs.find((d) => d.id === me);
+    if (!mine) return;
+    if (mine.match) { enterMatch(mine.match); return; }
+    const myAt = olMs(mine.at), mySince = olMs(mine.since);
+    const live = q.docs.filter((d) => d.id !== me && !d.match && myAt - olMs(d.at) < OL_FRESH);
+    q.others = live.length;
+    const older = live.filter((d) => olMs(d.since) < mySince || (olMs(d.since) === mySince && d.id < me));
+    if (older.length && !q.claiming) claim(q, older[0]);
+  }
+  async function claim(q, other) {
+    q.claiming = true;
+    const me = uid(), oref = FB.fs.doc(`lobby/${gid}/waiting/${other.id}`), mref = FB.fs.collection('matches').doc();
+    try {
+      await FB.fs.runTransaction(async (tx) => {
+        const od = await tx.get(oref);
+        if (!od.exists || od.data().match) throw new Error('taken');
+        let p = [me, other.id], names = [FB.username, od.data().username || 'Player'];
+        if (Math.random() < 0.5) { p = p.reverse(); names = names.reverse(); }
+        const now = Date.now();
+        tx.set(mref, { game: gid, p, names, mv: '', h0: '', h1: '', first: 0, n: 1, win: -1, why: '', sc0: 0, sc1: 0, rm0: false, rm1: false, q0: false, q1: false, e0: '', e1: '', k0: 0, k1: 0, hb0: now, hb1: now, at: olTS() });
+        tx.update(oref, { match: mref.id });
+        tx.delete(q.ref);
+      });
+      if (S.q === q) enterMatch(mref.id);
+    } catch (e) { q.claiming = false; }
+  }
+  function stopQueue(del) {
+    const q = S.q; if (!q) return; S.q = null;
+    if (q.unsub) q.unsub(); if (q.hb) clearInterval(q.hb);
+    if (del) q.ref.delete().catch(() => {});
+  }
+
+  // ----- sessions -----
+  function blankMatch(names) { return { game: gid, names, mv: '', h0: '', h1: '', first: 0, n: 1, win: -1, why: '', sc0: 0, sc1: 0, rm0: false, rm1: false, q0: false, q1: false, e0: '', e1: '', k0: 0, k1: 0 }; }
+  function newSess(kind) {
+    return { kind, m: null, me: 0, id: null, unsub: null, hb: null, lastKey: '', changeAt: performance.now(), oppHb: null, oppSeen: performance.now(), counted: {}, recorded: {}, finishing: {}, botBusy: false, emoAt: 0, seenK: [0, 0], reveal: null, gone: false };
+  }
+  function enterMatch(id) {
+    stopQueue(true);
+    const s = S.sess = newSess('online'); s.id = id; S.scr = 'match';
+    const ref = FB.fs.doc('matches/' + id);
+    s.unsub = ref.onSnapshot((d) => {
+      if (S.sess !== s || !d.exists) return;
+      const m = d.data(); const me = m.p.indexOf(uid()); if (me < 0) return;
+      s.me = me; const prev = s.m; s.m = m; onUpdate(s, prev);
+    }, () => { if (S.sess === s) S.err = 'Connection problem…'; });
+    s.hb = setInterval(() => { if (S.sess !== s || !s.m) return; ref.update({ ['hb' + s.me]: Date.now() }).catch(() => {}); }, OL_HB);
+  }
+  function startBot() {
+    stopQueue(true); leaveSess();
+    const s = S.sess = newSess('bot'); S.scr = 'match'; S.err = '';
+    s.m = blankMatch([FB.username || 'You', 'Bot Shreyas']); s.m.first = Math.random() < 0.5 ? 0 : 1;
+    onUpdate(s, null);
+  }
+  function act(s, f) {
+    if (s.kind === 'bot') { const prev = Object.assign({}, s.m); Object.assign(s.m, f); onUpdate(s, prev); return; }
+    FB.fs.doc('matches/' + s.id).update(f).catch((e) => { if (S.sess === s) S.err = 'Move didn’t send. Check your internet.'; });
+  }
+  function finish(s, w, why) {
+    const m = s.m; if (!m || m.win !== -1 || s.finishing[m.n]) return; s.finishing[m.n] = true;
+    if (s.kind === 'bot') { const f = { win: w, why }; if (w < 2) f['sc' + w] = m['sc' + w] + 1; act(s, f); return; }
+    const ref = FB.fs.doc('matches/' + s.id), n = m.n;
+    FB.fs.runTransaction(async (tx) => {
+      const d = await tx.get(ref); const x = d.data(); if (!x || x.win !== -1 || x.n !== n) return;
+      const f = { win: w, why }; if (w < 2) f['sc' + w] = (x['sc' + w] || 0) + 1; tx.update(ref, f);
+    }).catch(() => { s.finishing[n] = false; });
+  }
+  function leaveSess() {
+    const s = S.sess; if (!s) return; S.sess = null;
+    if (s.unsub) s.unsub(); if (s.hb) clearInterval(s.hb);
+    if (s.kind === 'online' && s.m) {
+      const ref = FB.fs.doc('matches/' + s.id);
+      if (s.m.win === -1) {
+        const w = 1 - s.me, n = s.m.n;
+        FB.fs.runTransaction(async (tx) => { const d = await tx.get(ref); const x = d.data(); if (!x || x.win !== -1 || x.n !== n) return; tx.update(ref, { win: w, why: 'quit', ['sc' + w]: (x['sc' + w] || 0) + 1, ['q' + (1 - w)]: true }); }).catch(() => {});
+      } else ref.update({ ['q' + s.me]: true, ['rm' + s.me]: false }).catch(() => {});
+    }
+  }
+  function movesMade(m) { return isRps ? m.h0.length + m.h1.length : m.mv.length; }
+  function onUpdate(s, prev) {
+    const m = s.m, me = s.me, op = 1 - me;
+    const key = m.n + '|' + m.mv + '|' + m.h0 + '|' + m.h1;
+    if (key !== s.lastKey) { s.lastKey = key; s.changeAt = performance.now(); }
+    if (s.kind === 'online' && m['hb' + op] !== s.oppHb) { s.oppHb = m['hb' + op]; s.oppSeen = performance.now(); }
+    // new piece animation (Connect 4 drop)
+    if (gid === 'oc4' && prev && prev.n === m.n && m.mv.length === prev.mv.length + 1) {
+      const b = R.board(m.mv, m.first), col = +m.mv[m.mv.length - 1];
+      let cell = -1; for (let r = 0; r < 6; r++) if (b[r * 7 + col] >= 0) { cell = r * 7 + col; break; }
+      S.anim = { cell, t: 0 };
+    }
+    if (isRps && prev && prev.n === m.n && m.h0.length === m.h1.length && m.h0.length > Math.min(prev.h0.length, prev.h1.length)) {
+      const i = m.h0.length - 1; S.reveal = { a: m['h' + me][i], b: m['h' + op][i], t: 0 };
+    }
+    // emotes
+    for (const k of [0, 1]) if (m['k' + k] && m['k' + k] !== s.seenK[k]) { s.seenK[k] = m['k' + k]; S.bubble[k === me ? 0 : 1] = { e: m['e' + k], t: 0 }; }
+    // result bookkeeping
+    if (m.win !== -1 && !s.recorded[m.n]) {
+      s.recorded[m.n] = true;
+      const res = m.win === 2 ? 'd' : m.win === me ? 'w' : 'l';
+      if (s.kind === 'bot') { if (res !== 'd') olStatAdd(gid, res === 'w' ? 'bw' : 'bl'); }
+      else olStatAdd(gid, res);
+      S.flash = 1;
+      if (res === 'w' && s.kind === 'online' && !s.counted[m.n] && (m.why === '' || movesMade(m) >= 2)) {
+        s.counted[m.n] = true; olAddWin(gid).then((v) => { if (v != null) env.score(v); });
+      }
+      if (s.kind === 'bot') setTimeout(() => { if (S.sess === s && Math.random() < 0.7) act(s, { e1: res === 'w' ? (Math.random() < 0.5 ? 'GG' : '😮') : (Math.random() < 0.5 ? '😂' : '🔥'), k1: m.k1 + 1 }); }, 700);
+    }
+    if (m.win === -1 && !(prev && prev.win === -1 && prev.n === m.n)) S.reveal = isRps ? null : S.reveal;
+    // RPS round resolution
+    if (isRps && m.win === -1 && m.h0.length === m.h1.length && m.h0.length > 0) {
+      const sc = rpsScore(m.h0, m.h1);
+      if (sc[0] >= R.need || sc[1] >= R.need) setTimeout(() => { if (S.sess === s) finish(s, sc[0] >= R.need ? 0 : 1, ''); }, s.kind === 'bot' ? 900 : 0);
+    }
+    // rematch: player 0 resets the board when both agree
+    if (m.win !== -1 && m.rm0 && m.rm1 && (me === 0 || s.kind === 'bot')) {
+      act(s, { mv: '', h0: '', h1: '', win: -1, why: '', rm0: false, rm1: false, first: 1 - m.first, n: m.n + 1 });
+    }
+    if (s.kind === 'bot') botThink(s);
+  }
+  function turnOf(m) { return (m.first + m.mv.length) % 2; }
+  function botThink(s) {
+    const m = s.m; if (s.botBusy) return;
+    if (m.win !== -1) { if (m.rm0 && !m.rm1) { s.botBusy = true; setTimeout(() => { s.botBusy = false; if (S.sess === s) act(s, { rm1: true }); }, 500); } return; }
+    if (isRps) {
+      if (m.h1.length > m.h0.length) return;
+      s.botBusy = true;
+      setTimeout(() => {
+        s.botBusy = false; if (S.sess !== s || s.m.win !== -1 || s.m.h1.length > s.m.h0.length) return;
+        const last = s.m.h0[s.m.h0.length - 1]; let pick = 'rps'[Math.floor(Math.random() * 3)];
+        if (last && Math.random() < 0.35) pick = Object.keys(R.beats).find((k) => R.beats[k] === last); // guesses you repeat
+        act(s, { h1: s.m.h1 + pick });
+      }, 600 + Math.random() * 900);
+      return;
+    }
+    if (turnOf(m) !== 1) return;
+    s.botBusy = true;
+    setTimeout(() => {
+      s.botBusy = false; if (S.sess !== s || s.m.win !== -1 || turnOf(s.m) !== 1) return;
+      const b = R.board(s.m.mv, s.m.first); playMove(s, 1, String(R.bot(b, 1)));
+    }, 550 + Math.random() * 700);
+  }
+  function playMove(s, who, ch) {
+    const m = s.m; if (m.win !== -1 || turnOf(m) !== who) return;
+    const b = R.board(m.mv, m.first); if (!R.legal(b, ch)) return;
+    const mv = m.mv + ch, res = R.winner(R.board(mv, m.first)), f = { mv };
+    if (res) { f.win = res.w; f.why = ''; if (res.w < 2) f['sc' + res.w] = m['sc' + res.w] + 1; }
+    act(s, f);
+  }
+  function pickRps(s, ch) {
+    const m = s.m, me = s.me; if (m.win !== -1) return;
+    const mine = m['h' + me], theirs = m['h' + (1 - me)];
+    if (mine.length > theirs.length) return;
+    act(s, { ['h' + me]: mine + ch });
+  }
+  function emote(s, e) {
+    const now = performance.now(); if (now - s.emoAt < 1500) return; s.emoAt = now;
+    act(s, { ['e' + s.me]: e, ['k' + s.me]: (s.m['k' + s.me] || 0) + 1 });
+  }
+  function waitingOn(s) { // index of the player we're waiting on, or -1
+    const m = s.m; if (m.win !== -1) return -1;
+    if (isRps) { const a = m['h' + s.me].length, b = m['h' + (1 - s.me)].length; return a > b ? 1 - s.me : a < b ? s.me : -2; }
+    return turnOf(m);
+  }
+
+  // ----- per-frame checks (timeouts, disconnects) -----
+  function tick(dt) {
+    S.t += dt; if (S.anim) { S.anim.t += dt; if (S.anim.t > 0.4) S.anim = null; }
+    if (S.reveal) S.reveal.t += dt; S.flash = Math.max(0, S.flash - dt * 1.5);
+    S.bubble.forEach((b, i) => { if (b) { b.t += dt; if (b.t > 2.6) S.bubble[i] = null; } });
+    const s = S.sess; if (!s || !s.m || s.kind !== 'online') return;
+    const m = s.m, op = 1 - s.me, now = performance.now();
+    s.gone = m['q' + op] || now - s.oppSeen > OL_GONE * 1000;
+    if (m.win === -1) {
+      if (s.gone) finish(s, s.me, m['q' + op] ? 'quit' : 'left');
+      else { const wo = waitingOn(s); if (wo === op && now - s.changeAt > OL_TURN * 1000) finish(s, s.me, 'time'); }
+    }
+  }
+  function timeLeft(s) { return Math.max(0, Math.ceil(OL_TURN - (performance.now() - s.changeAt) / 1000)); }
+
+  // ----- drawing -----
+  function button(c, x, y, w, h, label, fn, col, small) {
+    const i = S.btns.length; S.btns.push({ x, y, w, h, fn, label });
+    const hov = S.hover === i;
+    c.fillStyle = C.ink; rr(c, x + 3, y + 4, w, h, 12); c.fill();
+    c.fillStyle = col || '#fff'; rr(c, x, y + (hov ? 2 : 0), w, h, 12); c.fill(); c.lineWidth = 3; c.strokeStyle = C.ink; c.stroke();
+    c.fillStyle = col && col !== '#fff' && col !== C.yellow ? '#fff' : C.ink; c.font = olFont(small ? 15 : 19); c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText(label, x + w / 2, y + h / 2 + (hov ? 3 : 1));
+  }
+  function text(c, t, x, y, size, col, align, w) { c.fillStyle = col || C.ink; c.font = olFont(size, w); c.textAlign = align || 'center'; c.textBaseline = 'middle'; c.fillText(t, x, y); }
+  function bg(c) {
+    sky(c, '#cfe6ff', '#fdf3d8');
+    c.fillStyle = 'rgba(29,27,46,.05)'; for (let i = 0; i < 12; i++) { c.beginPath(); c.arc((i * 97 + S.t * 8) % 460 - 30, (i * 151) % 600, 18 + (i % 4) * 8, 0, TAU); c.fill(); }
+  }
+  function avatar(c, x, y, name, col, bot) {
+    if (bot) { drawShreyas(c, x, y + 3, 15, { mood: 'grin' }); return; }
+    c.fillStyle = col; c.beginPath(); c.arc(x, y, 17, 0, TAU); c.fill(); c.lineWidth = 3; c.strokeStyle = C.ink; c.stroke();
+    text(c, (name || '?')[0].toUpperCase(), x, y + 1, 17, '#fff');
+  }
+  function chip(c, y, idx, s, label) {
+    const m = s.m, isMe = idx === s.me, col = isMe ? C.blue : C.red;
+    const wo = waitingOn(s), active = wo === idx || (wo === -2);
+    c.fillStyle = C.ink; rr(c, 17, y + 4, 370, 54, 14); c.fill();
+    c.fillStyle = active ? '#fff3c4' : '#fff'; rr(c, 14, y, 370, 54, 14); c.fill(); c.lineWidth = 3; c.strokeStyle = C.ink; c.stroke();
+    avatar(c, 44, y + 27, m.names[idx], col, s.kind === 'bot' && !isMe);
+    const nm = (isMe ? 'You' : m.names[idx]) + (s.kind === 'online' && !isMe && s.gone && m.win !== -1 ? ' (left)' : '');
+    text(c, nm, 72, y + 19, 17, C.ink, 'left');
+    text(c, label, 72, y + 39, 13, '#5b5870', 'left', 700);
+    c.font = olDisp(30); c.textAlign = 'right'; c.textBaseline = 'middle'; c.fillStyle = col; c.fillText(String(m['sc' + idx]), 370, y + 28);
+    text(c, 'wins', 330, y + 28, 11, '#5b5870', 'right', 700);
+    const b = S.bubble[isMe ? 0 : 1];
+    if (b) {
+      const a = Math.min(1, (2.6 - b.t) * 3), bx = 250, by = y + (isMe ? -26 : 64);
+      c.globalAlpha = a; c.fillStyle = '#fff'; rr(c, bx - 34, by - 20, 68, 40, 14); c.fill(); c.lineWidth = 3; c.strokeStyle = C.ink; c.stroke();
+      c.font = b.e === 'GG' ? olFont(20) : '26px system-ui, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"'; c.fillStyle = C.ink; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(b.e, bx, by + 1); c.globalAlpha = 1;
+    }
+  }
+  function pieceLabel(s, idx) {
+    if (isRps) return `First to ${R.need} rounds`;
+    if (gid === 'ottt') return `Plays ${((idx - s.m.first + 2) % 2) === 0 ? 'X (goes first)' : 'O'}`;
+    return `${idx === 0 ? 'Yellow' : 'Red'} discs`;
+  }
+  function drawX(c, x, y, r) { c.lineCap = 'round'; c.strokeStyle = C.ink; c.lineWidth = 15; c.beginPath(); c.moveTo(x - r, y - r); c.lineTo(x + r, y + r); c.moveTo(x + r, y - r); c.lineTo(x - r, y + r); c.stroke(); c.strokeStyle = C.blue; c.lineWidth = 9; c.stroke(); }
+  function drawO(c, x, y, r) { c.strokeStyle = C.ink; c.lineWidth = 15; c.beginPath(); c.arc(x, y, r, 0, TAU); c.stroke(); c.strokeStyle = C.red; c.lineWidth = 9; c.stroke(); }
+  function drawTTT(c, s) {
+    const m = s.m, b = R.board(m.mv, m.first), res = R.winner(b), bx = 50, by = 150, cs = 100;
+    c.fillStyle = C.ink; rr(c, bx - 6, by - 6 + 5, 312, 312, 18); c.fill(); c.fillStyle = '#fff'; rr(c, bx - 10, by - 10, 320, 320, 18); c.fill(); c.lineWidth = 3; c.strokeStyle = C.ink; c.stroke();
+    c.strokeStyle = 'rgba(29,27,46,.8)'; c.lineWidth = 5; c.lineCap = 'round';
+    for (let i = 1; i < 3; i++) { c.beginPath(); c.moveTo(bx + i * cs, by + 8); c.lineTo(bx + i * cs, by + 300 - 8); c.stroke(); c.beginPath(); c.moveTo(bx + 8, by + i * cs); c.lineTo(bx + 300 - 8, by + i * cs); c.stroke(); }
+    const myTurn = m.win === -1 && turnOf(m) === s.me;
+    for (let i = 0; i < 9; i++) {
+      const x = bx + (i % 3) * cs + 50, y = by + Math.floor(i / 3) * cs + 50;
+      const sym = b[i] < 0 ? -1 : (b[i] - m.first + 2) % 2; // 0 = X, 1 = O
+      if (sym === 0) drawX(c, x, y, 26); else if (sym === 1) drawO(c, x, y, 30);
+      else if (myTurn && S.hover === 100 + i) { c.globalAlpha = 0.25; ((s.me - m.first + 2) % 2 === 0 ? drawX : drawO)(c, x, y, 26); c.globalAlpha = 1; }
+    }
+    if (res && res.line) { const a = res.line[0], z = res.line[2]; c.strokeStyle = C.yellow; c.lineWidth = 10; c.globalAlpha = 0.85; c.beginPath(); c.moveTo(bx + (a % 3) * cs + 50, by + Math.floor(a / 3) * cs + 50); c.lineTo(bx + (z % 3) * cs + 50, by + Math.floor(z / 3) * cs + 50); c.stroke(); c.globalAlpha = 1; }
+  }
+  function disc(c, x, y, who) { c.fillStyle = who === 0 ? C.yellow : C.red; c.beginPath(); c.arc(x, y, 20, 0, TAU); c.fill(); c.lineWidth = 3; c.strokeStyle = C.ink; c.stroke(); c.strokeStyle = 'rgba(255,255,255,.45)'; c.lineWidth = 3; c.beginPath(); c.arc(x, y, 13, Math.PI * 1.1, Math.PI * 1.6); c.stroke(); }
+  function drawC4(c, s) {
+    const m = s.m, b = R.board(m.mv, m.first), res = R.winner(b), bx = 25, by = 160, cs = 50;
+    const myTurn = m.win === -1 && turnOf(m) === s.me;
+    if (myTurn && S.hover >= 200) { const col = S.hover - 200; if (R.drop(b, col) >= 0) { c.globalAlpha = 0.5; disc(c, bx + col * cs + 25, by - 26, s.me); c.globalAlpha = 1; } }
+    c.fillStyle = C.ink; rr(c, bx - 4, by - 4 + 5, 358, 308, 16); c.fill();
+    c.fillStyle = C.blue; rr(c, bx - 8, by - 8, 366, 316, 16); c.fill(); c.lineWidth = 3; c.strokeStyle = C.ink; c.stroke();
+    for (let i = 0; i < 42; i++) {
+      const x = bx + (i % 7) * cs + 25, y0 = by + Math.floor(i / 7) * cs + 25;
+      c.fillStyle = '#e8f0ff'; c.beginPath(); c.arc(x, y0, 20, 0, TAU); c.fill(); c.lineWidth = 2; c.strokeStyle = 'rgba(29,27,46,.5)'; c.stroke();
+      if (b[i] >= 0) {
+        let y = y0; if (S.anim && S.anim.cell === i) { const k = Math.min(1, S.anim.t / 0.35); y = (by - 26) + (y0 - (by - 26)) * k * k; }
+        disc(c, x, y, b[i]);
+      }
+    }
+    if (res && res.line) { c.strokeStyle = '#fff'; c.lineWidth = 5; res.line.forEach((i) => { c.beginPath(); c.arc(bx + (i % 7) * cs + 25, by + Math.floor(i / 7) * cs + 25, 23, 0, TAU); c.stroke(); }); }
+  }
+  function hand(c, ch, x, y, size, flip) {
+    c.save(); c.translate(x, y); if (flip) c.scale(1, -1);
+    c.font = `${size}px system-ui, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(RPS_ICON[ch], 0, 0); c.restore();
+  }
+  function drawRPS(c, s) {
+    const m = s.m, me = s.me, op = 1 - me, mine = m['h' + me], theirs = m['h' + op];
+    const sc = rpsScore(m['h' + me], m['h' + op]);
+    // round tally
+    text(c, `Round ${Math.min(mine.length, theirs.length) + (m.win === -1 ? 1 : 0)}`, W / 2, 162, 15, '#5b5870', 'center', 800);
+    c.font = olDisp(54); c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = 6; c.strokeStyle = C.ink;
+    const tally = `${sc[0]} - ${sc[1]}`; c.strokeText(tally, W / 2, 205); c.fillStyle = '#fff'; c.fillText(tally, W / 2, 205);
+    // arena
+    c.fillStyle = '#fff'; rr(c, 40, 240, 320, 150, 18); c.fill(); c.lineWidth = 3; c.strokeStyle = C.ink; c.stroke();
+    const rv = S.reveal;
+    if (rv && rv.t < 2.2) {
+      const k = Math.min(1, rv.t / 0.3), wob = rv.t < 0.3 ? Math.sin(rv.t * 40) * 6 : 0;
+      c.globalAlpha = k; hand(c, rv.b, 130, 315 + wob, 70); hand(c, rv.a, 270, 315 - wob, 70); c.globalAlpha = 1;
+      text(c, 'VS', W / 2, 315, 18, '#5b5870');
+      const r = R.beats[rv.a] === rv.b ? 'You win the round!' : R.beats[rv.b] === rv.a ? `${m.names[op]} wins the round` : 'Tie round!';
+      text(c, r, W / 2, 262, 16, R.beats[rv.a] === rv.b ? C.green : R.beats[rv.b] === rv.a ? C.red : C.ink);
+      text(c, `${RPS_NAME[rv.b]}  vs  ${RPS_NAME[rv.a]}`, W / 2, 372, 13, '#5b5870', 'center', 700);
+    } else if (m.win === -1) {
+      text(c, theirs.length > mine.length ? `✓ ${m.names[op]} has picked` : `${s.kind === 'bot' ? 'Bot Shreyas' : m.names[op]} is choosing…`, W / 2, 280, 16, theirs.length > mine.length ? C.green : '#5b5870');
+      text(c, mine.length > theirs.length ? `You picked ${RPS_NAME[mine[mine.length - 1]]}. Waiting…` : 'Pick your move below!', W / 2, 340, 17, C.ink);
+    }
+    // pick buttons
+    const canPick = m.win === -1 && mine.length <= theirs.length && !(rv && rv.t < 0.9);
+    ['r', 'p', 's'].forEach((ch, i) => {
+      const x = 30 + i * 120, y = 400, w = 100, h = 70, idx = S.btns.length;
+      S.btns.push({ x, y, w, h, fn: () => { if (canPick) pickRps(s, ch); } });
+      const sel = mine.length > theirs.length && mine[mine.length - 1] === ch;
+      c.globalAlpha = canPick || sel ? 1 : 0.45;
+      c.fillStyle = C.ink; rr(c, x + 3, y + 4, w, h, 14); c.fill();
+      c.fillStyle = sel ? C.yellow : '#fff'; rr(c, x, y + (S.hover === idx && canPick ? 2 : 0), w, h, 14); c.fill(); c.lineWidth = 3; c.strokeStyle = C.ink; c.stroke();
+      hand(c, ch, x + w / 2, y + 30, 34); text(c, RPS_NAME[ch], x + w / 2, y + 58, 12, C.ink);
+      c.globalAlpha = 1;
+    });
+  }
+  function drawMatch(c) {
+    const s = S.sess, m = s.m;
+    if (!m) { text(c, 'Joining the match…', W / 2, 300, 20); return; }
+    const me = s.me, op = 1 - me;
+    chip(c, 14, op, s, pieceLabel(s, op));
+    chip(c, isRps ? 482 : 470, me, s, pieceLabel(s, me));
+    // status line
+    let st = '', col = C.ink;
+    if (m.win === -1) {
+      if (isRps) { st = s.kind === 'online' ? `${timeLeft(s)}s to pick` : ''; }
+      else if (turnOf(m) === me) { st = 'Your turn!'; col = C.green; if (s.kind === 'online' && timeLeft(s) <= 15) st += `  ${timeLeft(s)}s`; }
+      else { st = `${s.kind === 'bot' ? 'Bot Shreyas' : m.names[op]} is thinking…`; col = '#5b5870'; }
+    }
+    if (!isRps) text(c, st, W / 2, gid === 'oc4' ? 98 : 112, 19, col);
+    else if (st) text(c, st, W / 2, 98, 13, '#5b5870', 'center', 700);
+    if (gid === 'ottt') drawTTT(c, s); else if (gid === 'oc4') drawC4(c, s); else drawRPS(c, s);
+    // emotes
+    const ey = 548;
+    EMOTES.forEach((e, i) => {
+      const x = 22 + i * 61, w = 52, h = 40;
+      S.btns.push({ x, y: ey, w, h, fn: () => emote(s, e) });
+      c.fillStyle = 'rgba(255,255,255,.85)'; rr(c, x, ey, w, h, 12); c.fill(); c.lineWidth = 2; c.strokeStyle = C.ink; c.stroke();
+      c.font = e === 'GG' ? olFont(16) : '22px system-ui, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"'; c.fillStyle = C.ink; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(e, x + w / 2, ey + h / 2 + 1);
+    });
+    if (S.err) text(c, S.err, W / 2, 140, 13, C.red, 'center', 700);
+    if (m.win !== -1 && !(isRps && S.reveal && S.reveal.t < 1.6) && !(S.anim)) drawResult(c, s);
+  }
+  function drawResult(c, s) {
+    const m = s.m, me = s.me, op = 1 - me, won = m.win === me, draw = m.win === 2;
+    const oname = s.kind === 'bot' ? 'Bot Shreyas' : m.names[op];
+    c.fillStyle = 'rgba(29,27,46,.35)'; c.fillRect(0, 0, W, H);
+    const y = 150;
+    c.fillStyle = C.ink; rr(c, 39, y + 6, 330, 290, 20); c.fill();
+    c.fillStyle = won ? '#e6f7ec' : draw ? '#fff' : '#fde8e6'; rr(c, 34, y, 330, 290, 20); c.fill(); c.lineWidth = 3; c.strokeStyle = C.ink; c.stroke();
+    drawShreyas(c, W / 2, y + 62, 34, { mood: won ? 'cool' : draw ? 'grin' : 'sad' });
+    c.font = olDisp(40); c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = 6; c.strokeStyle = C.ink;
+    const t = won ? 'You win!' : draw ? 'Draw!' : 'You lose';
+    c.strokeText(t, W / 2, y + 128); c.fillStyle = won ? C.green : draw ? C.yellow : C.red; c.fillText(t, W / 2, y + 128);
+    let why = '';
+    if (m.why === 'quit') why = won ? `${oname} left the game.` : 'You left the game.';
+    else if (m.why === 'left') why = won ? `${oname} disconnected.` : 'You disconnected.';
+    else if (m.why === 'time') why = won ? `${oname} ran out of time.` : 'You ran out of time.';
+    else why = won ? (s.kind === 'online' ? '+1 online win saved to your account' : 'Nice! (Bot games don’t count for the leaderboard)') : draw ? 'Nobody wins this one.' : `${oname} got you this time.`;
+    if (won && s.kind === 'online' && m.why) why += movesMade(m) >= 2 ? ' +1 win' : '';
+    text(c, why, W / 2, y + 162, 14, '#3a3750', 'center', 700);
+    const bw = 140;
+    if (s.kind === 'online') {
+      const iWant = m['rm' + me], theyWant = m['rm' + op];
+      let label = 'Rematch', fn = () => act(s, { ['rm' + me]: true });
+      if (s.gone) { label = `${m.names[op]} left`; fn = () => {}; }
+      else if (iWant) { label = 'Waiting…'; fn = () => {}; }
+      else if (theyWant) label = 'Accept rematch!';
+      button(c, 52, y + 190, bw, 44, label, fn, s.gone || iWant ? '#ddd' : C.yellow, true);
+      button(c, 206, y + 190, bw, 44, 'New player', () => { leaveSess(); joinQueue(); }, C.green, true);
+      if (theyWant && !iWant && !s.gone) text(c, `${m.names[op]} wants a rematch!`, W / 2, y + 252, 13, C.green, 'center', 800);
+    } else {
+      button(c, 52, y + 190, bw, 44, 'Play again', () => act(s, { rm0: true }), C.yellow, true);
+      button(c, 206, y + 190, bw, 44, 'Find a player', () => { leaveSess(); joinQueue(); }, C.green, true);
+    }
+    button(c, 129, y + 244 + (s.kind === 'online' && m['rm' + op] && !m['rm' + me] && !s.gone ? 8 : 0), bw, 34, 'Menu', () => { leaveSess(); S.scr = 'menu'; }, '#fff', true);
+  }
+  function drawMenu(c, info) {
+    bigText(c, info.title1, W / 2, 70, 44, C.yellow); bigText(c, info.title2, W / 2, 118, 38, '#fff');
+    text(c, '🌐 Play live against other players', W / 2, 160, 15, '#3a3750', 'center', 800);
+    info.art(c, W / 2, 255);
+    const online = FB.on, signed = online && !!FB.user;
+    button(c, 70, 340, 260, 58, !online ? 'Online is offline' : signed ? 'Find a player' : 'Log in to play online', () => { if (online) joinQueue(); }, online ? C.green : '#ddd');
+    button(c, 70, 412, 260, 50, 'Practice vs Bot Shreyas', startBot, '#fff');
+    const st = olStats(gid);
+    text(c, `Online record: ${st.w}W · ${st.l}L · ${st.d}D     vs bot: ${st.bw}W · ${st.bl}L`, W / 2, 492, 13, '#3a3750', 'center', 700);
+    if (signed) text(c, `Leaderboard wins: ${fmt(FB.mine[gid] || 0)}`, W / 2, 514, 13, '#3a3750', 'center', 700);
+    text(c, 'Tip: send a friend the site and both press Find a player.', W / 2, 560, 12, '#5b5870', 'center', 600);
+    if (S.err) text(c, S.err, W / 2, 316, 14, C.red, 'center', 800);
+  }
+  function drawQueue(c) {
+    const q = S.q, secs = q ? Math.floor((performance.now() - q.t0) / 1000) : 0;
+    drawShreyas(c, W / 2, 190 + Math.sin(S.t * 4) * 6, 54, { mood: 'grin', look: Math.sin(S.t * 1.7) });
+    c.lineWidth = 8; c.lineCap = 'round'; c.strokeStyle = C.blue; c.beginPath(); c.arc(W / 2, 190, 92, S.t * 4, S.t * 4 + 1.6); c.stroke();
+    bigText(c, 'Finding a player…', W / 2, 320, 32, '#fff');
+    text(c, `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`, W / 2, 356, 18, '#3a3750');
+    text(c, q && q.others ? `${q.others} other player${q.others > 1 ? 's' : ''} in the queue: connecting…` : 'You’re first in the queue.', W / 2, 384, 14, '#3a3750', 'center', 700);
+    if (secs >= 12) { text(c, 'Nobody’s here yet. Ask a friend to open the site', W / 2, 412, 13, '#5b5870', 'center', 600); text(c, 'and press Find a player, or practice below.', W / 2, 430, 13, '#5b5870', 'center', 600); }
+    button(c, 70, 452, 260, 50, 'Practice vs Bot Shreyas', startBot, '#fff');
+    button(c, 120, 516, 160, 44, 'Cancel', () => { stopQueue(true); S.scr = 'menu'; }, '#fff', true);
+  }
+
+  const onHide = () => { stopQueue(true); leaveSess(); };
+  window.addEventListener('pagehide', onHide);
+
+  return {
+    tick, S,
+    draw(c, info) {
+      S.btns = []; bg(c);
+      if (S.scr === 'menu') drawMenu(c, info);
+      else if (S.scr === 'queue') drawQueue(c);
+      else if (S.sess) drawMatch(c);
+      if (S.flash > 0) { c.fillStyle = `rgba(255,255,255,${S.flash * 0.3})`; c.fillRect(0, 0, W, H); }
+    },
+    down(x, y) {
+      for (let i = S.btns.length - 1; i >= 0; i--) { const b = S.btns[i]; if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h + 4) { b.fn(); return; } }
+      const s = S.sess; if (S.scr !== 'match' || !s || !s.m || s.m.win !== -1) return;
+      if (gid === 'ottt') { const cx = Math.floor((x - 50) / 100), cy = Math.floor((y - 150) / 100); if (cx >= 0 && cx < 3 && cy >= 0 && cy < 3) playMove(s, s.me, String(cy * 3 + cx)); }
+      if (gid === 'oc4') { const col = Math.floor((x - 25) / 50); if (col >= 0 && col < 7 && y > 110 && y < 470) playMove(s, s.me, String(col)); }
+    },
+    move(x, y) {
+      S.hover = -1;
+      for (let i = S.btns.length - 1; i >= 0; i--) { const b = S.btns[i]; if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) { S.hover = i; return; } }
+      if (S.scr !== 'match') return;
+      if (gid === 'ottt') { const cx = Math.floor((x - 50) / 100), cy = Math.floor((y - 150) / 100); if (cx >= 0 && cx < 3 && cy >= 0 && cy < 3) S.hover = 100 + cy * 3 + cx; }
+      if (gid === 'oc4') { const col = Math.floor((x - 25) / 50); if (col >= 0 && col < 7 && y > 110 && y < 470) S.hover = 200 + col; }
+    },
+    key(code, down) {
+      if (!down) return; const s = S.sess;
+      if (S.scr === 'match' && s && s.m && s.m.win === -1) {
+        if (gid === 'oc4' && /^Digit[1-7]$/.test(code)) playMove(s, s.me, String(+code.slice(5) - 1));
+        if (gid === 'ottt' && /^Digit[1-9]$/.test(code)) playMove(s, s.me, String(+code.slice(5) - 1));
+        if (isRps && ['KeyR', 'KeyP', 'KeyS'].includes(code)) { const m = s.m, mine = m['h' + s.me], th = m['h' + (1 - s.me)]; if (mine.length <= th.length) pickRps(s, code[3].toLowerCase()); }
+      }
+    },
+    destroy() { window.removeEventListener('pagehide', onHide); stopQueue(true); leaveSess(); },
+    _dbg: { S, startBot, joinQueue, playMove: (ch) => S.sess && playMove(S.sess, S.sess.me, ch), pick: (ch) => S.sess && pickRps(S.sess, ch), emote: (e) => S.sess && emote(S.sess, e) }
+  };
+}
+
+function onlineGame(def) {
+  GAMES.push({
+    id: def.id, name: def.name, tag: def.tag, badge: 'Online', scoreLabel: 'Online wins', noOverlay: true, online: true, howto: def.tag,
+    thumb: def.thumb,
+    create(env) {
+      const o = makeOnline(def.id, env);
+      return { down: o.down, move: o.move, up() {}, key: o.key, update: o.tick, draw: (c) => o.draw(c, def.menu), destroy: o.destroy, _dbg: o._dbg };
+    }
+  });
+}
+function olThumbBg(c, w, h, a, b) { const g = c.createLinearGradient(0, 0, 0, h); g.addColorStop(0, a); g.addColorStop(1, b); c.fillStyle = g; c.fillRect(0, 0, w, h); }
+function olLive(c, w) { c.fillStyle = C.red; rr(c, w - 74, 10, 64, 24, 12); c.fill(); c.lineWidth = 2; c.strokeStyle = C.ink; c.stroke(); c.fillStyle = '#fff'; c.font = '800 13px system-ui'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('● LIVE', w - 42, 23); }
+onlineGame({
+  id: 'ottt', name: 'Tic-Tac-Toe Online', tag: 'Get matched with a real player and go for three in a row. Rematch, send emotes, climb the wins board.',
+  thumb(c, w, h) {
+    olThumbBg(c, w, h, '#cfe6ff', '#fff6dc');
+    const s = h * 0.24, x0 = w / 2 - s * 1.5, y0 = h / 2 - s * 1.5;
+    c.strokeStyle = C.ink; c.lineWidth = 4; c.lineCap = 'round';
+    for (let i = 1; i < 3; i++) { c.beginPath(); c.moveTo(x0 + i * s, y0 + 6); c.lineTo(x0 + i * s, y0 + 3 * s - 6); c.stroke(); c.beginPath(); c.moveTo(x0 + 6, y0 + i * s); c.lineTo(x0 + 3 * s - 6, y0 + i * s); c.stroke(); }
+    const X = (i) => { const x = x0 + (i % 3) * s + s / 2, y = y0 + Math.floor(i / 3) * s + s / 2, r = s * 0.25; c.strokeStyle = C.blue; c.lineWidth = 6; c.beginPath(); c.moveTo(x - r, y - r); c.lineTo(x + r, y + r); c.moveTo(x + r, y - r); c.lineTo(x - r, y + r); c.stroke(); };
+    const O = (i) => { const x = x0 + (i % 3) * s + s / 2, y = y0 + Math.floor(i / 3) * s + s / 2; c.strokeStyle = C.red; c.lineWidth = 6; c.beginPath(); c.arc(x, y, s * 0.28, 0, TAU); c.stroke(); };
+    [0, 4, 8].forEach(X); [2, 6].forEach(O);
+    drawShreyas(c, w * 0.13, h * 0.72, h * 0.15, { mood: 'cool' });
+  },
+  menu: {
+    title1: 'TIC-TAC-TOE', title2: 'ONLINE',
+    art(c, x, y) { c.save(); c.translate(x, y); drawShreyas(c, -60, 10, 40, { mood: 'cool' }); c.strokeStyle = C.blue; c.lineWidth = 10; c.lineCap = 'round'; c.beginPath(); c.moveTo(20, -30); c.lineTo(70, 20); c.moveTo(70, -30); c.lineTo(20, 20); c.stroke(); c.strokeStyle = C.red; c.beginPath(); c.arc(105, 30, 24, 0, TAU); c.stroke(); c.restore(); }
+  }
+});
+onlineGame({
+  id: 'oc4', name: 'Connect 4 Online', tag: 'Drop discs against a live opponent. First to line up four wins. Rematch, emotes and a wins leaderboard.',
+  thumb(c, w, h) {
+    olThumbBg(c, w, h, '#ffe9b0', '#fff6dc');
+    const cs = h * 0.13, bx = w / 2 - cs * 3.5, by = h * 0.2;
+    c.fillStyle = C.blue; rr(c, bx - 6, by - 6, cs * 7 + 12, cs * 6 + 12, 10); c.fill(); c.lineWidth = 3; c.strokeStyle = C.ink; c.stroke();
+    const pat = '.......' + '.......' + '...y...' + '..ry...' + '.yrry..' + 'ryrryy.';
+    for (let i = 0; i < 42; i++) { const ch = pat[i]; c.fillStyle = ch === 'y' ? C.yellow : ch === 'r' ? C.red : '#e8f0ff'; c.beginPath(); c.arc(bx + (i % 7) * cs + cs / 2, by + Math.floor(i / 7) * cs + cs / 2, cs * 0.38, 0, TAU); c.fill(); }
+   
+  },
+  menu: {
+    title1: 'CONNECT 4', title2: 'ONLINE',
+    art(c, x, y) { drawShreyas(c, x - 70, y + 10, 40, { mood: 'grin' }); [[C.yellow, 0], [C.red, 1], [C.yellow, 2]].forEach(([col, i]) => { c.fillStyle = col; c.beginPath(); c.arc(x + 20 + i * 36, y + 20 - i * 18, 18, 0, TAU); c.fill(); c.lineWidth = 3; c.strokeStyle = C.ink; c.stroke(); }); }
+  }
+});
+onlineGame({
+  id: 'orps', name: 'Rock Paper Shreyas', tag: 'Rock, paper, scissors against a real player. Pick at the same time, first to 3 rounds wins.',
+  thumb(c, w, h) {
+    olThumbBg(c, w, h, '#ffd9d3', '#fff6dc');
+    c.font = `${h * 0.26}px system-ui, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"`; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText('✊', w * 0.22, h * 0.6); c.fillText('✌️', w * 0.78, h * 0.6);
+    drawShreyas(c, w / 2, h * 0.55, h * 0.2, { mood: 'shock' });
+  },
+  menu: {
+    title1: 'ROCK PAPER', title2: 'SHREYAS',
+    art(c, x, y) { drawShreyas(c, x, y + 8, 42, { mood: 'shock' }); c.font = '44px system-ui, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('✊', x - 105, y + 10); c.fillText('✌️', x + 105, y + 10); }
+  }
+});
+
 /* ======================= ACCOUNTS + LEADERBOARDS ======================= */
 // Online mode: Firebase Auth (username + password) and Firestore leaderboards.
 // Offline mode (no firebase-config.js filled in): scores are kept on this device.
@@ -3344,6 +3927,14 @@ function localNameForm(container, id, score, after) {
 /* ======================= FEEDBACK + UPDATE LOG ======================= */
 // Newest first. Add an entry here every time an update is pushed.
 const UPDATES = [
+  { id: '2026-10-14g', date: 'Oct 14, 2026', title: 'Online multiplayer is here', items: [
+    'NEW: 🌐 Online games! Press Find a player and you’ll be matched with the next person in the queue.',
+    'Tic-Tac-Toe Online, Connect 4 Online and Rock Paper Shreyas (first to 3 rounds).',
+    'Send emotes to your opponent, ask for a rematch, or find a new player.',
+    'Every online win counts on the leaderboards and toward Arcade Champions.',
+    'Nobody around? Practice against Bot Shreyas while you wait.',
+    'If a player leaves, disconnects or takes longer than 40 seconds on their turn, the other player wins.'
+  ] },
   { id: '2026-10-14f', date: 'Oct 14, 2026', title: '4 new games', items: [
     'NEW: Shreyas Crush. Match-3 with striped zappers and Shreyas bombs. 30 moves to score big.',
     'NEW: Shreyas Bowling. 10 frames, real pin physics and proper strike and spare scoring.',
@@ -3523,14 +4114,14 @@ let curEnv = null;
 let cur = null, inst = null, running = false, scoreNow = 0, last = 0;
 function drawThumb(cv, g) { const c = cv.getContext('2d'); const w = cv.width / 2, h = cv.height / 2; c.save(); c.scale(2, 2); g.thumb(c, w, h); c.restore(); }
 var CATS = [
-  { id: 'all', name: 'All' }, { id: 'fav', name: '★ Favorites' },
+  { id: 'all', name: 'All' }, { id: 'fav', name: '★ Favorites' }, { id: 'online', name: '🌐 Online', ids: ['ottt', 'oc4', 'orps'] },
   { id: 'action', name: 'Action', ids: ['egg', 'flappy', 'run', 'whack', 'snake', 'catch', 'space', 'jump', 'breakout', 'dodge', 'hop', 'adventure', 'survivors', 'racer'] },
   { id: 'brain', name: 'Brain', ids: ['2048', 'memory', 'math', 'simon', 'sweeper', 'merge', 'crush'] },
   { id: 'sports', name: 'Sports & chill', ids: ['hoops', 'pong', 'stack', 'reaction', 'fishing', 'bowling', 'golf'] },
   { id: 'strategy', name: 'Strategy & idle', ids: ['clicker', 'td'] },
   { id: 'scary', name: 'Scary', ids: ['horror'] }
 ];
-var NEW_IDS = ['crush', 'bowling', 'racer', 'golf'];
+var NEW_IDS = ['ottt', 'oc4', 'orps'];
 var hubCat = store.get('hubCat', 'all'), hubQuery = '', favs = new Set(store.get('favs', [])), hubBuilt = false;
 function dailyGame() { const d = new Date(); const key = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); let h = key; h = ((h ^ 61) ^ (h >>> 16)) * 9; h = h ^ (h >>> 4); h = h * 0x27d4eb2d; h = h ^ (h >>> 15); return GAMES[Math.abs(h) % GAMES.length]; }
 function allCards() { return [...GAMES, HORROR]; }
@@ -3630,7 +4221,7 @@ function openGame(g) {
 }
 function closeGame() { if (inst && inst.destroy) inst.destroy(); inst = null; cur = null; running = false; $('view').hidden = true; $('hub').hidden = false; buildHub(); }
 $('backBtn').onclick = closeGame;
-$('restartBtn').onclick = () => { if (!cur) return; if (cur.id === 'clicker') return; startInstance(); begin(); };
+$('restartBtn').onclick = () => { if (!cur) return; if (cur.id === 'clicker' || cur.online) return; startInstance(); begin(); };
 
 function pt(e) { const r = canvas.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * W, (e.clientY - r.top) / r.height * H]; }
 canvas.addEventListener('pointerdown', (e) => { if (!running || !inst) return; canvas.setPointerCapture(e.pointerId); const [x, y] = pt(e); inst.down && inst.down(x, y, e.pointerId, e.button); e.preventDefault(); });
