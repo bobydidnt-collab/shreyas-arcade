@@ -34,6 +34,7 @@ service cloud.firestore {
 
     // Each player's best score per game. Anyone can read; only you can write yours,
     // only under your own username, and only if it beats your saved best.
+    // Online games (ottt, oc4, orps) count wins, which can only go up by one at a time.
     match /scores/{game}/entries/{uid} {
       allow read: if true;
       allow create, update: if request.auth != null && request.auth.uid == uid
@@ -45,7 +46,6 @@ service cloud.firestore {
         && request.resource.data.at is number
         && request.resource.data.username == get(/databases/$(database)/documents/users/$(uid)).data.username
         && (resource == null || request.resource.data.score > resource.data.score)
-        // online games: wins can only go up by one at a time
         && (!game.matches('^o(ttt|c4|rps)$')
             || (resource == null && request.resource.data.score == 1)
             || (resource != null && request.resource.data.score == resource.data.score + 1));
