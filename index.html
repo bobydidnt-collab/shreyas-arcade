@@ -351,18 +351,25 @@ function drawShreyas(c, x, y, s, o) {
     if (!o.night) { c.fillStyle = '#fff'; ell(c, ex + lk + 1.5, 2, 1.4, 1.4); c.fill(); }
   });
   // glasses (thick, square)
+  if (!o.noGlasses) {
   c.strokeStyle = ink; c.lineWidth = 5;
   rr(c, -35, -9, 31, 24, 5); c.stroke(); rr(c, 4, -9, 31, 24, 5); c.stroke();
   c.beginPath(); c.moveTo(-4, -1); c.lineTo(4, -1); c.stroke();
   c.lineWidth = 3.5; c.beginPath(); c.moveTo(-35, -3); c.lineTo(-44, -1); c.moveTo(35, -3); c.lineTo(44, -1); c.stroke();
   if (o.mood === 'cool') { c.fillStyle = ink; rr(c, -35, -9, 31, 24, 5); c.fill(); rr(c, 4, -9, 31, 24, 5); c.fill(); }
   c.fillStyle = 'rgba(255,255,255,.25)'; c.beginPath(); c.moveTo(-31, -6); c.lineTo(-24, -6); c.lineTo(-30, 8); c.closePath(); c.fill();
+  }
   // nose
   c.strokeStyle = C.skinDark; c.lineWidth = 3; c.beginPath(); c.moveTo(0, 8); c.quadraticCurveTo(-6, 22, -2, 25); c.quadraticCurveTo(3, 27, 7, 24); c.stroke();
   // mouth
   c.strokeStyle = ink; c.lineWidth = 3.5;
   const m = o.mood || 'happy';
-  if (m === 'shock') { c.fillStyle = '#4a1414'; ell(c, 0, 40, 8, 10); c.fill(); c.stroke(); }
+  if (o.mouth != null) {
+    const op = clamp(o.mouth, 0, 1);
+    c.fillStyle = '#4a1414'; ell(c, 0, 38, 11 + op * 4, 2.5 + op * 13); c.fill(); c.stroke();
+    if (op > 0.35) { c.fillStyle = '#e06a6a'; ell(c, 0, 38 + op * 8, 7, 4 * op); c.fill(); }
+  }
+  else if (m === 'shock') { c.fillStyle = '#4a1414'; ell(c, 0, 40, 8, 10); c.fill(); c.stroke(); }
   else if (m === 'sad') { c.beginPath(); c.arc(0, 48, 12, Math.PI * 1.15, Math.PI * 1.85); c.stroke(); }
   else if (m === 'grin' || o.night) {
     c.fillStyle = '#4a1414'; c.beginPath(); c.moveTo(-20, 33); c.quadraticCurveTo(0, 56, 20, 33); c.closePath(); c.fill(); c.stroke();
@@ -3118,6 +3125,943 @@ GAMES.push({
 });
 
 /* ---------- 8. Shreyas Horror (link) ---------- */
+/* ======================= FUNNY PACK ======================= */
+const FUN = {
+  ac: null,
+  audio() { try { this.ac = this.ac || new (window.AudioContext || window.webkitAudioContext)(); if (this.ac.state === 'suspended') this.ac.resume(); } catch (e) { this.ac = null; } return this.ac; },
+  tone(f, dur, type, vol, f2, when) {
+    const ac = this.audio(); if (!ac) return;
+    try {
+      const t = ac.currentTime + (when || 0), o = ac.createOscillator(), g = ac.createGain();
+      o.type = type || 'square'; o.frequency.setValueAtTime(f, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+      g.gain.setValueAtTime(vol || 0.07, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + dur + 0.03);
+    } catch (e) {}
+  },
+  say(text, pitch, rate) {
+    const st = { until: performance.now() + 450 + String(text).length * 62 };
+    try {
+      if (window.speechSynthesis && window.SpeechSynthesisUtterance) {
+        speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text); u.pitch = pitch == null ? 1.8 : pitch; u.rate = rate || 1.08;
+        u.onend = () => { st.until = Math.min(st.until, performance.now()); };
+        speechSynthesis.speak(u);
+      }
+    } catch (e) {}
+    return st;
+  },
+  hush() { try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) {} }
+};
+const pick = (a) => a[Math.floor(Math.random() * a.length)];
+function funFont(size, w) { return `${w || 800} ${size}px Rubik, system-ui, sans-serif`; }
+function wrapLines(c, text, maxW) {
+  const words = String(text).split(' '), lines = []; let cur = '';
+  for (const w of words) { const t = cur ? cur + ' ' + w : w; if (c.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t; }
+  if (cur) lines.push(cur); return lines;
+}
+// x,y = the tip of the tail. Bubble sits above the tip unless o.below.
+function speechBubble(c, x, y, text, o) {
+  o = o || {}; const size = o.size || 16, maxW = o.maxW || 250;
+  c.save(); c.font = funFont(size, 700);
+  const lines = wrapLines(c, text, maxW), lh = size * 1.25;
+  const w = Math.min(maxW, Math.max(...lines.map((l) => c.measureText(l).width))) + 26, h = lines.length * lh + 16 + (o.title ? size : 0);
+  const bx = clamp(x - w / 2, 6, W - 6 - w), by = o.below ? y + 14 : y - 14 - h, tx = clamp(x, bx + 16, bx + w - 16);
+  c.globalAlpha = o.alpha == null ? 1 : o.alpha;
+  c.fillStyle = o.fill || '#fff'; c.strokeStyle = C.ink; c.lineWidth = 3; rr(c, bx, by, w, h, 12); c.fill(); c.stroke();
+  const base = o.below ? by + 2 : by + h - 2;
+  c.beginPath(); c.moveTo(tx - 9, base); c.lineTo(x, y); c.lineTo(tx + 9, base); c.fill();
+  c.beginPath(); c.moveTo(tx - 9, base + (o.below ? -1 : 1)); c.lineTo(x, y); c.lineTo(tx + 9, base + (o.below ? -1 : 1)); c.stroke();
+  c.textAlign = 'left'; c.textBaseline = 'top'; let ty = by + 8;
+  if (o.title) { c.fillStyle = o.titleColor || C.red; c.font = funFont(size - 2, 800); c.fillText(o.title, bx + 13, ty); ty += size; c.font = funFont(size, 700); }
+  c.fillStyle = o.color || C.ink; lines.forEach((l, i) => c.fillText(l, bx + 13, ty + i * lh));
+  c.restore();
+}
+function funButton(c, x, y, w, h, label, o) {
+  o = o || {};
+  c.fillStyle = C.ink; rr(c, x + 3, y + 4, w, h, 12); c.fill();
+  c.fillStyle = o.fill || '#fff'; rr(c, x, y + (o.pressed ? 2 : 0), w, h, 12); c.fill(); c.lineWidth = 3; c.strokeStyle = C.ink; c.stroke();
+  c.fillStyle = o.color || C.ink; c.textAlign = 'center'; c.textBaseline = 'middle';
+  if (o.icon) {
+    c.font = `${o.iconSize || 22}px system-ui, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"`; c.fillText(o.icon, x + w / 2, y + h / 2 - 8 + (o.pressed ? 2 : 0));
+    c.font = funFont(11); c.fillText(label, x + w / 2, y + h - 10 + (o.pressed ? 2 : 0));
+  } else {
+    c.font = funFont(o.size || 15, 700); const lines = wrapLines(c, label, w - 20), lh = (o.size || 15) * 1.2;
+    lines.forEach((l, i) => c.fillText(l, x + w / 2, y + h / 2 + (i - (lines.length - 1) / 2) * lh + 1 + (o.pressed ? 2 : 0)));
+  }
+}
+const inBox = (x, y, b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
+
+/* ---- Shreyas's family (and his teacher) ---- */
+const FAM = {
+  mom: { name: 'Mom', skin: '#8a5636', shirt: '#c2307a' },
+  dad: { name: 'Dad', skin: '#7a4a2c', shirt: '#2f6fd6' },
+  nani: { name: 'Nani', skin: '#8f5d3e', shirt: '#6e3fa3' },
+  sis: { name: 'Anika', skin: '#8a5232', shirt: '#f08a2c' },
+  uncle: { name: 'Raju Uncle', skin: '#6e4228', shirt: '#e2483b' },
+  teacher: { name: 'Ms. Grumble', skin: '#e3b28c', shirt: '#2f9e5b' }
+};
+function drawFamBody(c, x, y, s, who) {
+  const F = FAM[who];
+  c.fillStyle = F.shirt; c.strokeStyle = C.ink; c.lineWidth = 3;
+  rr(c, x - s * 1.15, y + s * 0.85, s * 2.3, s * 1.9, s * 0.55); c.fill(); c.stroke();
+  if (who === 'uncle') { c.strokeStyle = '#e8c040'; c.lineWidth = s * 0.08; c.beginPath(); c.arc(x, y + s * 0.95, s * 0.45, 0.15 * Math.PI, 0.85 * Math.PI); c.stroke(); }
+  if (who === 'dad') { c.fillStyle = '#c23a2c'; c.beginPath(); c.moveTo(x - s * 0.1, y + s * 1.0); c.lineTo(x + s * 0.1, y + s * 1.0); c.lineTo(x + s * 0.14, y + s * 1.8); c.lineTo(x, y + s * 2.0); c.lineTo(x - s * 0.14, y + s * 1.8); c.closePath(); c.fill(); c.lineWidth = 2; c.strokeStyle = C.ink; c.stroke(); }
+  if (who === 'nani') { c.fillStyle = 'rgba(255,255,255,.25)'; rr(c, x - s * 1.15, y + s * 0.95, s * 0.5, s * 1.7, s * 0.3); c.fill(); }
+}
+// opts: mood happy|mad|shock|laugh|love|sad, mouth 0..1 (talking), blink, rot
+function drawFam(c, x, y, s, who, o) {
+  o = o || {}; const F = FAM[who], k = s / 50, ink = C.ink, mood = o.mood || 'happy';
+  c.save(); c.translate(x, y); if (o.rot) c.rotate(o.rot); c.scale(k, k); c.lineJoin = 'round'; c.lineCap = 'round'; c.lineWidth = 3.5; c.strokeStyle = ink;
+  const gray = '#d9d4cc', brown = '#6b3f1e';
+  if (who === 'mom') { c.fillStyle = C.hair; rr(c, -53, -42, 106, 112, 32); c.fill(); c.stroke(); }
+  if (who === 'sis') { c.fillStyle = C.hair; ell(c, -56, -16, 14, 24); c.fill(); c.stroke(); ell(c, 56, -16, 14, 24); c.fill(); c.stroke(); c.fillStyle = C.yellow; ell(c, -47, -30, 6, 6); c.fill(); c.stroke(); ell(c, 47, -30, 6, 6); c.fill(); c.stroke(); }
+  if (who === 'nani' || who === 'teacher') { c.fillStyle = who === 'nani' ? gray : brown; ell(c, 0, -60, 21, 17); c.fill(); c.stroke(); }
+  c.fillStyle = F.skin; ell(c, -45, 8, 9, 14); c.fill(); c.stroke(); ell(c, 45, 8, 9, 14); c.fill(); c.stroke();
+  if (who === 'mom') { c.fillStyle = '#e8c040'; [-46, 46].forEach((ex) => { c.beginPath(); c.arc(ex, 27, 5, 0, TAU); c.fill(); c.stroke(); }); }
+  c.beginPath(); c.moveTo(-42, -10); c.bezierCurveTo(-44, 30, -30, 58, 0, 58); c.bezierCurveTo(30, 58, 44, 30, 42, -10); c.bezierCurveTo(40, -48, -40, -48, -42, -10); c.closePath();
+  c.fillStyle = F.skin; c.fill(); c.stroke();
+  c.fillStyle = 'rgba(0,0,0,.08)'; ell(c, 26, 30, 12, 9); c.fill(); ell(c, -26, 30, 12, 9); c.fill();
+  if (mood === 'love' || mood === 'laugh' || who === 'nani') { c.fillStyle = 'rgba(230,80,90,.25)'; ell(c, 27, 26, 9, 6); c.fill(); ell(c, -27, 26, 9, 6); c.fill(); }
+  // hair
+  const cap = (col) => { c.fillStyle = col; c.beginPath(); c.moveTo(-44, 0); c.bezierCurveTo(-50, -54, 50, -54, 44, 0); c.bezierCurveTo(32, -30, 6, -34, 0, -28); c.bezierCurveTo(-6, -34, -32, -30, -44, 0); c.closePath(); c.fill(); c.stroke(); };
+  if (who === 'mom') cap(C.hair);
+  if (who === 'nani') { cap(gray); c.strokeStyle = 'rgba(0,0,0,.15)'; c.lineWidth = 2; for (let i = -2; i <= 2; i++) { c.beginPath(); c.moveTo(i * 9, -30); c.quadraticCurveTo(i * 12, -44, i * 8, -50); c.stroke(); } c.strokeStyle = ink; c.lineWidth = 3.5; }
+  if (who === 'teacher') cap(brown);
+  if (who === 'dad') { c.fillStyle = C.hair; ell(c, -41, -12, 7, 15); c.fill(); ell(c, 41, -12, 7, 15); c.fill(); c.fillStyle = 'rgba(255,255,255,.3)'; ell(c, -10, -38, 12, 5); c.fill(); }
+  if (who === 'sis') { c.fillStyle = C.hair; c.beginPath(); c.moveTo(-45, -2); c.bezierCurveTo(-50, -54, 50, -54, 45, -2); c.lineTo(32, -16); c.lineTo(20, -8); c.lineTo(8, -18); c.lineTo(-6, -8); c.lineTo(-18, -18); c.lineTo(-32, -8); c.closePath(); c.fill(); c.stroke(); }
+  if (who === 'uncle') { c.fillStyle = C.hair; c.beginPath(); c.moveTo(-44, -4); c.bezierCurveTo(-54, -62, -8, -92, 30, -76); c.bezierCurveTo(58, -64, 50, -28, 44, -4); c.bezierCurveTo(32, -28, -30, -28, -44, -4); c.closePath(); c.fill(); c.stroke(); c.fillStyle = 'rgba(255,255,255,.35)'; ell(c, 4, -66, 16, 5); c.fill(); }
+  // brows
+  c.strokeStyle = who === 'nani' ? '#a9a197' : who === 'teacher' ? brown : C.hair; c.lineWidth = 5.5;
+  const by = mood === 'shock' ? -22 : -15, inner = mood === 'mad' ? 7 : mood === 'sad' ? -6 : 0;
+  c.beginPath(); c.moveTo(-31, by); c.lineTo(-11, by + inner); c.stroke(); c.beginPath(); c.moveTo(31, by); c.lineTo(11, by + inner); c.stroke();
+  // eyes
+  const shades = who === 'uncle';
+  if (!shades) [-19, 19].forEach((ex) => {
+    if (o.blink || mood === 'laugh') { c.strokeStyle = ink; c.lineWidth = 3.5; c.beginPath(); c.arc(ex, 6, 6, Math.PI * 1.1, Math.PI * 1.9); c.stroke(); return; }
+    if (mood === 'love') { c.fillStyle = C.red; c.beginPath(); c.moveTo(ex, 9); c.bezierCurveTo(ex - 10, 1, ex - 5, -6, ex, -1); c.bezierCurveTo(ex + 5, -6, ex + 10, 1, ex, 9); c.fill(); return; }
+    c.fillStyle = '#fff'; ell(c, ex, 3, 7.5, mood === 'shock' ? 9 : 6.5); c.fill();
+    c.fillStyle = '#2c170b'; ell(c, ex + (o.look || 0) * 3, 4, mood === 'mad' ? 3.5 : 4.2, mood === 'mad' ? 3.5 : 4.8); c.fill();
+    c.fillStyle = '#fff'; ell(c, ex + 1.5, 2, 1.3, 1.3); c.fill();
+  });
+  // glasses
+  c.strokeStyle = ink;
+  if (who === 'dad') { c.lineWidth = 3; rr(c, -33, -7, 28, 20, 3); c.stroke(); rr(c, 5, -7, 28, 20, 3); c.stroke(); c.beginPath(); c.moveTo(-5, 0); c.lineTo(5, 0); c.stroke(); }
+  if (who === 'nani') { c.lineWidth = 3.5; c.beginPath(); c.arc(-19, 3, 14, 0, TAU); c.stroke(); c.beginPath(); c.arc(19, 3, 14, 0, TAU); c.stroke(); c.beginPath(); c.moveTo(-5, 1); c.lineTo(5, 1); c.stroke(); }
+  if (who === 'teacher') { c.lineWidth = 4; c.strokeStyle = '#b02a62'; [-1, 1].forEach((sd) => { c.beginPath(); c.moveTo(sd * 4, -4); c.lineTo(sd * 34, -10); c.lineTo(sd * 32, 10); c.lineTo(sd * 6, 12); c.closePath(); c.stroke(); }); c.strokeStyle = ink; }
+  if (shades) { c.fillStyle = '#111'; c.lineWidth = 3; [-1, 1].forEach((sd) => { c.beginPath(); c.moveTo(sd * 4, -6); c.lineTo(sd * 36, -8); c.quadraticCurveTo(sd * 36, 16, sd * 20, 15); c.quadraticCurveTo(sd * 4, 14, sd * 4, -6); c.closePath(); c.fill(); c.stroke(); }); c.fillStyle = 'rgba(255,255,255,.35)'; c.beginPath(); c.moveTo(-30, -4); c.lineTo(-22, -4); c.lineTo(-28, 6); c.closePath(); c.fill(); }
+  // nose
+  c.strokeStyle = 'rgba(0,0,0,.35)'; c.lineWidth = 3; c.beginPath(); c.moveTo(0, 9); c.quadraticCurveTo(-6, 22, -2, 25); c.quadraticCurveTo(3, 27, 7, 24); c.stroke();
+  // mustache
+  if (who === 'dad') { c.fillStyle = C.hair; c.beginPath(); c.moveTo(-20, 33); c.quadraticCurveTo(-10, 24, 0, 29); c.quadraticCurveTo(10, 24, 20, 33); c.quadraticCurveTo(10, 36, 0, 33); c.quadraticCurveTo(-10, 36, -20, 33); c.fill(); }
+  if (who === 'uncle') { c.strokeStyle = C.hair; c.lineWidth = 3.5; c.beginPath(); c.moveTo(-16, 31); c.quadraticCurveTo(0, 25, 16, 31); c.stroke(); }
+  // mouth
+  c.strokeStyle = ink; c.lineWidth = 3.5;
+  const my = who === 'dad' || who === 'uncle' ? 40 : 37;
+  if (o.mouth != null && o.mouth > 0.05) { const op = clamp(o.mouth, 0, 1); c.fillStyle = '#4a1414'; ell(c, 0, my + 2, 10 + op * 3, 2.5 + op * 10); c.fill(); c.stroke(); }
+  else if (mood === 'shock') { c.fillStyle = '#4a1414'; ell(c, 0, my + 3, 7, 9); c.fill(); c.stroke(); }
+  else if (mood === 'mad') { c.beginPath(); c.moveTo(-12, my + 4); c.quadraticCurveTo(0, my - 3, 12, my + 4); c.stroke(); }
+  else if (mood === 'sad') { c.beginPath(); c.arc(0, my + 12, 11, Math.PI * 1.15, Math.PI * 1.85); c.stroke(); }
+  else if (mood === 'laugh' || mood === 'love') {
+    c.fillStyle = '#4a1414'; c.beginPath(); c.moveTo(-18, my - 4); c.quadraticCurveTo(0, my + 20, 18, my - 4); c.closePath(); c.fill(); c.stroke();
+    c.fillStyle = '#fff'; c.fillRect(-14, my - 3, 28, 5);
+    if (who === 'sis') { c.strokeStyle = '#8a8f99'; c.lineWidth = 2; c.beginPath(); c.moveTo(-13, my); c.lineTo(13, my); c.stroke(); }
+  } else { c.beginPath(); c.arc(0, my - 8, 12, Math.PI * 0.22, Math.PI * 0.78); c.stroke(); }
+  c.restore();
+}
+
+/* ---------- 36. Talking Shreyas ---------- */
+GAMES.push({
+  id: 'talking', name: 'Talking Shreyas', tag: 'Talk and he repeats you in a squeaky voice. Call him on the phone, feed him eggs, poke his hair, hand him homework.', badge: 'Funny', noOverlay: true, noBoard: true, scoreLabel: 'Laughs',
+  howto: 'Tap Talk and say something. Tap his hair, glasses, belly or toes. Swipe fast across his face.',
+  thumb(c, w, h) {
+    sky(c, '#ffe2c4', '#ffd29c'); c.fillStyle = '#e8a86a'; c.fillRect(0, h * 0.82, w, h * 0.18);
+    drawShreyasBody(c, w * 0.45, h * 1.02, h * 0.17, { face: { mood: 'grin', mouth: 0.9 } });
+    speechBubble(c, w * 0.62, h * 0.32, 'Hehehe!', { size: Math.max(12, h * 0.09), maxW: w * 0.5 });
+    c.fillStyle = C.red; rr(c, w * 0.78, h * 0.6, w * 0.13, h * 0.24, 8); c.fill(); c.lineWidth = 2; c.strokeStyle = C.ink; c.stroke();
+    c.font = `${h * 0.12}px system-ui, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('🎤', w * 0.845, h * 0.72);
+  },
+  create(env) {
+    const X = 200, FEET = 532, S = 56, K = S / 50, HY = FEET - 228 * K;
+    const st = { t: 0, talk: null, bubble: null, mood: 'happy', moodT: 0, glasses: null, tilt: 0, tiltV: 0, blinkT: 2.5, blink: 0, idle: 0, eggs: [], chew: 0, tears: 0, dance: 0, phone: false, mic: null, laughs: 0, stars: 0, hair: 0, wiggle: 0, jump: 0, paper: null, press: -1, last: null, slapCd: 0, outAmp: 0 };
+    let dead = false;
+    const fl = floaters();
+    const laugh = (n) => { st.laughs += n || 1; env.score(st.laughs); };
+    const busy = () => (st.talk && performance.now() < st.talk.until + 350) || (st.mic && st.mic.playing);
+    function say(text, mood, pitch) {
+      st.bubble = { text, t: 0 }; st.talk = FUN.say(text, pitch); st.idle = 0;
+      if (mood) { st.mood = mood; st.moodT = Math.max(2, text.length * 0.07); }
+    }
+    const BTN = [{ id: 'mic', icon: '🎤', label: 'Talk' }, { id: 'phone', icon: '📞', label: 'Phone' }, { id: 'egg', icon: '🥚', label: 'Egg' }, { id: 'hw', icon: '📚', label: 'Homework' }, { id: 'dance', icon: '🕺', label: 'Dance' }]
+      .map((b, i) => Object.assign(b, { x: 10 + i * 77, y: 540, w: 69, h: 52 }));
+    const askBtn = { x: 110, y: 22, w: 180, h: 44 };
+    const IDLE = ['Did you know eggs have about 6 grams of protein?', 'I’m bored. Poke me or something.', 'My hair gel costs more than my shoes.', 'Hello? Is anyone there?', 'I could be studying right now. But I won’t.', '*adjusts glasses dramatically*'];
+    const HAIR = ['Not the hair! It took 45 minutes!', 'Do you know how much gel that is?!', 'NOOO my slick-back!', 'Hands off the masterpiece!'];
+    const NOSE = ['Boop.', 'Hey! That’s my nose!', 'Ow. Rude.', 'Beep boop. I am a robot.'];
+    const TICKLE = ['Hehehe! Stop! Hahaha!', 'Hahaha! Not the belly!', 'Ehehehe! I’m ticklish!'];
+    const TOES = ['My toes!', 'Ow! I need those for walking!', 'Hey! Watch the shoes!'];
+    const ANS = [['Yes.', 'happy'], ['No.', 'sad'], ['Ehehehehe.', 'grin'], ['Ugh.', 'sad'], ['Hmm. Maybe.', 'happy'], ['Ask my mom.', 'happy'], ['Absolutely not.', 'shock'], ['Hohoho!', 'grin'], ['Obviously.', 'cool']];
+
+    // ----- microphone (talk-back) -----
+    async function toggleMic() {
+      if (st.mic) { micOff(); say('Okay, I’ll stop listening.'); return; }
+      const ac = FUN.audio();
+      if (!ac || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !ac.createScriptProcessor) { say('I can’t hear anything on this device. Try the other buttons!', 'sad'); return; }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+        if (dead) { stream.getTracks().forEach((t) => t.stop()); return; }
+        const src = ac.createMediaStreamSource(stream), proc = ac.createScriptProcessor(2048, 1, 1), sink = ac.createGain(); sink.gain.value = 0;
+        src.connect(proc); proc.connect(sink); sink.connect(ac.destination);
+        const out = ac.createAnalyser(); out.fftSize = 512; out.connect(ac.destination);
+        const m = st.mic = { stream, src, proc, sink, out, rec: null, level: 0, floor: 0.01, playing: false, buf: new Uint8Array(512) };
+        proc.onaudioprocess = (e) => {
+          if (st.mic !== m) return;
+          const d = e.inputBuffer.getChannelData(0); let sum = 0; for (let i = 0; i < d.length; i++) sum += d[i] * d[i];
+          const rms = Math.sqrt(sum / d.length); m.level = rms;
+          if (busy()) { m.rec = null; return; }
+          const thr = Math.max(0.025, m.floor * 3);
+          if (!m.rec) { if (rms > thr) m.rec = { chunks: [new Float32Array(d)], len: d.length, quiet: 0 }; else m.floor = m.floor * 0.95 + rms * 0.05; return; }
+          m.rec.chunks.push(new Float32Array(d)); m.rec.len += d.length;
+          m.rec.quiet = rms < thr * 0.7 ? m.rec.quiet + d.length / ac.sampleRate : 0;
+          if (m.rec.quiet > 0.65 || m.rec.len > ac.sampleRate * 6) { const r = m.rec; m.rec = null; heard(r, ac); }
+        };
+        say(st.phone ? 'I’m listening. Ask me anything!' : 'Say something! I’ll repeat it.');
+      } catch (e) { say('I need the microphone for that. Tap Talk again and press Allow.', 'sad'); }
+    }
+    function micOff() {
+      const m = st.mic; if (!m) return; st.mic = null;
+      try { m.proc.onaudioprocess = null; m.src.disconnect(); m.proc.disconnect(); m.sink.disconnect(); m.stream.getTracks().forEach((t) => t.stop()); } catch (e) {}
+    }
+    function heard(r, ac) {
+      const keep = r.len - Math.floor(r.quiet * ac.sampleRate * 0.8);
+      if (keep < ac.sampleRate * 0.3 || dead || !st.mic) return;
+      if (st.phone) { answer(); return; }
+      const m = st.mic, buf = ac.createBuffer(1, keep, ac.sampleRate), ch = buf.getChannelData(0); let o = 0;
+      for (const chunk of r.chunks) { const n = Math.min(chunk.length, keep - o); if (n <= 0) break; ch.set(chunk.subarray(0, n), o); o += n; }
+      let peak = 0; for (let i = 0; i < keep; i++) peak = Math.max(peak, Math.abs(ch[i]));
+      if (peak > 0) { const g = Math.min(4, 0.8 / peak); for (let i = 0; i < keep; i++) ch[i] *= g; }
+      const node = ac.createBufferSource(); node.buffer = buf; node.playbackRate.value = 1.6; node.connect(m.out);
+      m.playing = true; st.mood = 'happy'; st.idle = 0; node.onended = () => { m.playing = false; };
+      node.start(); laugh();
+    }
+    function answer() {
+      const a = pick(ANS); say(a[0], a[1], 1.3); laugh();
+      if (Math.random() < 0.08) setTimeout(() => { if (!dead && st.phone) { st.phone = false; say('Okay bye!', 'happy'); FUN.tone(480, 0.15, 'square', 0.05); FUN.tone(380, 0.2, 'square', 0.05, null, 0.18); } }, 1300);
+    }
+    function press(id) {
+      FUN.audio(); st.idle = 0;
+      if (id === 'mic') toggleMic();
+      if (id === 'phone') {
+        st.phone = !st.phone; FUN.tone(880, 0.08, 'square', 0.05); FUN.tone(660, 0.08, 'square', 0.05, null, 0.1);
+        if (st.phone) say(st.mic ? 'Hello? Shreyas speaking. Ask me a question!' : 'Hello? Shreyas speaking. Ask me a yes or no question!', 'happy', 1.4);
+        else say('*hangs up*');
+        laugh();
+      }
+      if (id === 'egg') { st.eggs.push({ t: 0, x0: rand(60, 340) }); FUN.tone(500, 0.2, 'triangle', 0.06, 900); }
+      if (id === 'hw' && !st.paper) { st.paper = { t: 0 }; }
+      if (id === 'dance' && st.dance <= 0) {
+        st.dance = 5.6; say('Let’s gooo!', 'cool'); laugh();
+        const notes = [523, 659, 784, 659, 587, 698, 880, 698, 523, 659, 784, 1046, 988, 784, 659, 523];
+        notes.forEach((f, i) => { FUN.tone(f, 0.16, 'square', 0.045, null, 0.35 + i * 0.32); if (i % 2 === 0) FUN.tone(f / 4, 0.2, 'triangle', 0.08, null, 0.35 + i * 0.32); });
+      }
+    }
+    function touch(x, y) {
+      st.idle = 0; laugh();
+      const dx = x - X, dy = y - HY;
+      if (st.glasses && st.glasses.floor && Math.abs(x - st.glasses.x) < 40 && Math.abs(y - st.glasses.y) < 30) { st.glasses = null; say('Ahh, I can see again!', 'happy'); return; }
+      if (Math.hypot(dx, dy) < S * 1.12) {
+        if (dy < -S * 0.42) { st.hair = 4; say(pick(HAIR), 'shock'); FUN.tone(700, 0.15, 'square', 0.05, 300); return; }
+        if (!st.glasses && Math.abs(dy - 3 * K) < 15 * K && Math.abs(dx) < 40 * K) { st.glasses = { x: X, y: HY, vx: dx > 0 ? -90 : 90, vy: -260, floor: false, rot: 0 }; say('Hey! I can’t see! Is that you, Mom?', 'shock'); FUN.tone(900, 0.1, 'square', 0.05, 400); return; }
+        st.tiltV += dx > 0 ? -2.5 : 2.5; say(pick(NOSE), 'shock'); FUN.tone(1200, 0.06, 'sine', 0.06); return;
+      }
+      if (Math.abs(dx) < 42 * K && y > FEET - 190 * K && y < FEET - 85 * K) { st.wiggle = 1.6; say(pick(TICKLE), 'grin', 2); return; }
+      if (Math.abs(dx) < 50 * K && y > FEET - 85 * K) { st.jump = 0.5; say(pick(TOES), 'shock'); FUN.tone(300, 0.12, 'square', 0.06, 600); }
+    }
+    function slap(dir) {
+      st.slapCd = 0.7; st.tiltV += dir * 7; st.stars = 2; laugh(2); say(pick(['OW! What was that for?!', 'OOF!', 'My glasses almost flew off!', 'Rude!']), 'shock');
+      FUN.tone(160, 0.12, 'sawtooth', 0.09, 70);
+    }
+    say('Hi! I’m Shreyas. Talk to me, or poke me. Gently.', 'happy');
+
+    return {
+      down(x, y) {
+        for (const b of BTN) if (inBox(x, y, b)) { st.press = BTN.indexOf(b); press(b.id); return; }
+        if (st.phone && !st.mic && inBox(x, y, askBtn)) { answer(); return; }
+        st.last = { x, y, t: performance.now() }; touch(x, y);
+      },
+      move(x, y) {
+        if (!st.last) return;
+        const now = performance.now(), dt = Math.max(1, now - st.last.t), sp = Math.hypot(x - st.last.x, y - st.last.y) / dt * 1000;
+        if (sp > 1300 && st.slapCd <= 0 && Math.hypot(x - X, y - HY) < S * 1.2) slap(x > st.last.x ? 1 : -1);
+        st.last = { x, y, t: now };
+      },
+      up() { st.last = null; st.press = -1; },
+      key(code, down) { if (down && /^Digit[1-5]$/.test(code)) press(BTN[+code[5] - 1].id); },
+      update(dt) {
+        st.t += dt; fl.step(dt);
+        st.slapCd -= dt; st.stars = Math.max(0, st.stars - dt); st.hair = Math.max(0, st.hair - dt); st.wiggle = Math.max(0, st.wiggle - dt);
+        st.jump = Math.max(0, st.jump - dt); st.tears = Math.max(0, st.tears - dt); st.chew = Math.max(0, st.chew - dt); st.dance = Math.max(0, st.dance - dt);
+        st.tiltV += -st.tilt * 60 * dt; st.tiltV *= Math.pow(0.02, dt); st.tilt = clamp(st.tilt + st.tiltV * dt, -0.6, 0.6);
+        st.moodT -= dt; if (st.moodT <= 0) st.mood = 'happy';
+        st.blinkT -= dt; if (st.blinkT <= 0) { st.blink = 0.14; st.blinkT = rand(2, 5); } st.blink = Math.max(0, st.blink - dt);
+        if (st.bubble) { st.bubble.t += dt; if (!busy() && st.bubble.t > 1.2 && (!st.talk || performance.now() > st.talk.until + 1400)) st.bubble = null; }
+        st.idle += dt; if (st.idle > 14 && !busy()) say(pick(IDLE), 'happy');
+        if (st.glasses) {
+          const g = st.glasses;
+          if (!g.floor) { g.vy += 900 * dt; g.x += g.vx * dt; g.y += g.vy * dt; g.rot += 8 * dt; if (g.y > FEET + 4) { g.y = FEET + 4; g.floor = true; g.rot = 0; g.t = 0; FUN.tone(1500, 0.05, 'square', 0.04); } }
+          else { g.t += dt; if (g.t > 5) { st.glasses = null; say('Found them. Phew.', 'happy'); } }
+        }
+        for (const e of st.eggs) e.t += dt;
+        const ate = st.eggs.filter((e) => e.t >= 0.6); st.eggs = st.eggs.filter((e) => e.t < 0.6);
+        if (ate.length) {
+          st.chew = 1.3; laugh(); FUN.tone(220, 0.1, 'square', 0.05); FUN.tone(200, 0.1, 'square', 0.05, null, 0.25); FUN.tone(230, 0.1, 'square', 0.05, null, 0.5);
+          setTimeout(() => {
+            if (dead) return;
+            if (Math.random() < 0.3) { say('BUURRRRP. Excuse me.', 'grin', 0.6); FUN.tone(110, 0.6, 'sawtooth', 0.08, 60); }
+            else say(pick(['Mmm, egg!', 'Needs salt.', 'Best egg ever!', 'More eggs, please.', 'That one was a bit crunchy...']), 'happy');
+          }, 1300);
+        }
+        if (st.paper) {
+          st.paper.t += dt;
+          if (st.paper.t > 0.7 && !st.paper.done) {
+            st.paper.done = true; laugh();
+            if (Math.random() < 0.3) { st.paper.eat = true; st.chew = 1.4; setTimeout(() => { if (!dead) say('Problem solved.', 'cool'); }, 1400); }
+            else { st.tears = 3; say('NOOOOO! Not homework! Anything but homework!', 'sad', 2); FUN.tone(500, 0.9, 'triangle', 0.06, 250); }
+          }
+          if (st.paper.t > 3) st.paper = null;
+        }
+        if (st.mic && st.mic.playing) { const m = st.mic; m.out.getByteTimeDomainData(m.buf); let s = 0; for (let i = 0; i < m.buf.length; i++) { const v = (m.buf[i] - 128) / 128; s += v * v; } st.outAmp = Math.min(1, Math.sqrt(s / m.buf.length) * 6); }
+        else st.outAmp = 0;
+      },
+      draw(c) {
+        // bedroom
+        sky(c, '#ffe7cc', '#ffd6a6');
+        c.fillStyle = 'rgba(240,138,44,.12)'; for (let i = 0; i < 9; i++) c.fillRect(i * 48, 0, 22, 470);
+        c.fillStyle = '#bfe3ff'; rr(c, 22, 70, 96, 110, 8); c.fill(); c.lineWidth = 4; c.strokeStyle = '#8a5a2b'; c.stroke(); c.beginPath(); c.moveTo(70, 70); c.lineTo(70, 180); c.moveTo(22, 125); c.lineTo(118, 125); c.stroke();
+        c.fillStyle = '#fff'; rr(c, 300, 80, 80, 100, 6); c.fill(); c.lineWidth = 3; c.strokeStyle = C.ink; c.stroke(); drawEgg(c, 340, 120, 22, true); c.fillStyle = C.red; c.font = funFont(14); c.textAlign = 'center'; c.fillText('EGG FAN', 340, 165);
+        c.fillStyle = '#c98b52'; c.fillRect(0, 470, W, 130); c.fillStyle = 'rgba(0,0,0,.08)'; for (let i = 0; i < 8; i++) c.fillRect(0, 480 + i * 16, W, 2);
+        c.fillStyle = 'rgba(0,0,0,.15)'; ell(c, X, FEET + 4, 70, 12); c.fill();
+        // Shreyas
+        const talking = st.talk && performance.now() < st.talk.until;
+        let mouth = null;
+        if (st.outAmp > 0.02) mouth = st.outAmp; else if (st.chew > 0) mouth = 0.15 + 0.6 * Math.abs(Math.sin(st.t * 14)); else if (talking) mouth = 0.25 + 0.75 * Math.abs(Math.sin(st.t * 17));
+        const dance = st.dance > 0, ph = st.t * 9;
+        const bob = dance ? -Math.abs(Math.sin(ph)) * 18 : -Math.sin(st.jump * Math.PI * 2) * (st.jump > 0 ? 30 : 0);
+        const sway = dance ? Math.sin(ph * 0.5) * 22 : st.wiggle > 0 ? Math.sin(st.t * 40) * 5 : 0;
+        const face = { mood: dance ? 'cool' : st.mood, mouth, noGlasses: !!st.glasses, blink: st.blink > 0 || (st.glasses && !talking), rot: st.tilt + (dance ? Math.sin(ph * 0.5) * 0.18 : 0) };
+        c.save(); c.translate(X + sway, FEET + bob); c.rotate(dance ? Math.sin(ph * 0.5) * 0.08 : 0); c.translate(-X, -FEET);
+        drawShreyasBody(c, X, FEET, S, { run: dance ? ph : 0, arms: dance ? (Math.sin(ph) > 0 ? 'up' : 'shoot') : undefined, face });
+        const hy = HY;
+        if (st.hair > 0) { c.strokeStyle = C.hair; c.lineWidth = 4; for (let i = -3; i <= 3; i++) { c.beginPath(); c.moveTo(X + i * 9 * K, hy - 52 * K); c.quadraticCurveTo(X + i * 14 * K + Math.sin(st.t * 20 + i) * 4, hy - 75 * K, X + i * 18 * K, hy - 88 * K); c.stroke(); } }
+        if (st.phone) { c.save(); c.translate(X + 52 * K, hy + 6 * K); c.rotate(0.35); c.fillStyle = C.red; rr(c, -9, -34, 18, 68, 8); c.fill(); c.lineWidth = 3; c.strokeStyle = C.ink; c.stroke(); c.fillStyle = C.skin; ell(c, 4, 20, 13, 10); c.fill(); c.stroke(); c.restore(); }
+        if (st.tears > 0) { c.fillStyle = '#59b7ff'; for (let i = 0; i < 6; i++) { const yy = ((st.t * 160 + i * 37) % 120); [-1, 1].forEach((sd) => { ell(c, X + sd * (22 + yy * 0.25) * K, hy + 14 * K + yy, 4, 6); c.fill(); }); } }
+        c.restore();
+        if (st.stars > 0) { for (let i = 0; i < 5; i++) { const a = st.t * 5 + i * TAU / 5; c.font = '20px system-ui, "Apple Color Emoji", "Noto Color Emoji"'; c.textAlign = 'center'; c.fillText('⭐', X + Math.cos(a) * 60, HY - 55 + Math.sin(a) * 14); } }
+        // flying things
+        for (const e of st.eggs) { const k2 = e.t / 0.6; drawEgg(c, e.x0 + (X - e.x0) * k2, 600 - (600 - (HY + 38 * K)) * k2 - Math.sin(k2 * Math.PI) * 120, 14 * (1 - k2 * 0.4)); }
+        if (st.paper && st.paper.t < 0.7) { const k2 = st.paper.t / 0.7; c.save(); c.translate(-30 + (X + 40 + 30) * k2, 380 - Math.sin(k2 * Math.PI) * 140); c.rotate(k2 * 6); c.fillStyle = '#fff'; c.fillRect(-18, -24, 36, 48); c.strokeStyle = C.ink; c.lineWidth = 2; c.strokeRect(-18, -24, 36, 48); c.fillStyle = C.red; c.font = funFont(12); c.textAlign = 'center'; c.fillText('F', 0, -8); c.restore(); }
+        if (st.glasses) { const g = st.glasses; c.save(); c.translate(g.x, g.y); c.rotate(g.rot); c.strokeStyle = C.ink; c.lineWidth = 4; rr(c, -24, -8, 21, 16, 3); c.stroke(); rr(c, 3, -8, 21, 16, 3); c.stroke(); c.beginPath(); c.moveTo(-3, -2); c.lineTo(3, -2); c.stroke(); c.restore(); if (g.floor) { c.fillStyle = C.ink; c.font = funFont(11); c.textAlign = 'center'; c.fillText('tap to give back', g.x, g.y + 22); } }
+        fl.draw(c);
+        // UI
+        if (st.bubble) speechBubble(c, X + 30, HY - 70, st.bubble.text, { maxW: 280, size: 17 });
+        if (st.mic) {
+          const rec = st.mic.rec, pl = st.mic.playing;
+          c.fillStyle = pl ? C.yellow : rec ? C.red : '#fff'; rr(c, 10, 482, 170, 40, 12); c.fill(); c.lineWidth = 3; c.strokeStyle = C.ink; c.stroke();
+          c.fillStyle = pl ? C.ink : rec ? '#fff' : C.ink; c.font = funFont(13); c.textAlign = 'left'; c.textBaseline = 'middle';
+          c.fillText(pl ? '🔊 Repeating you…' : rec ? '🎙 Hearing you…' : st.phone ? '🎤 Ask a question' : '🎤 Listening…', 20, 496);
+          c.fillStyle = 'rgba(0,0,0,.15)'; c.fillRect(20, 508, 150, 6); c.fillStyle = C.green; c.fillRect(20, 508, Math.min(150, st.mic.level * 1500), 6);
+        }
+        if (st.phone && !st.mic) funButton(c, askBtn.x, askBtn.y, askBtn.w, askBtn.h, '❓ Ask a question', { fill: C.yellow, size: 15 });
+        BTN.forEach((b, i) => funButton(c, b.x, b.y, b.w, b.h, b.label, { icon: b.icon, pressed: st.press === i, fill: (b.id === 'mic' && st.mic) || (b.id === 'phone' && st.phone) || (b.id === 'dance' && st.dance > 0) ? C.yellow : '#fff' }));
+      },
+      destroy() { dead = true; micOff(); FUN.hush(); },
+      _dbg: { st, press, touch, slap }
+    };
+  }
+});
+
+/* ---------- 37. Meet Shreyas's Family ---------- */
+const FAM_QS = [
+  { who: 'mom', q: 'Beta, have you eaten?', a: [
+    ['Yes, I’m full, thank you!', { mom: -10 }, 'Full? You look like a pencil. Eat more.'],
+    ['I could eat a little…', { mom: 15, nani: 5 }, 'A little? I made enough for 40 people!'],
+    ['I only eat eggs.', { mom: -5, sis: 10 }, 'Shreyas… your friend is exactly like you.']] },
+  { who: 'dad', q: 'So! What do you want to be when you grow up?', a: [
+    ['A doctor.', { dad: 15, mom: 10 }, 'Excellent! Very, very excellent!'],
+    ['A professional gamer.', { dad: -15, sis: 10, uncle: 10 }, 'A… gamer. I see. Please pass the salt.'],
+    ['Taller.', { dad: 5, sis: 15 }, 'Hahaha! Good answer. Same, honestly.']] },
+  { who: 'nani', q: 'Why are you so thin? Here, eat this laddoo.', a: [
+    ['Thank you, Nani!', { nani: 15 }, 'Good child. Have three more.'],
+    ['I’m on a diet.', { nani: -20 }, 'Diet?! In MY house?!'],
+    ['Can I save it for later?', { nani: 5, sis: 10 }, 'Smart. Take the whole box.']] },
+  { who: 'sis', q: 'Are you Shreyas’s only friend?', a: [
+    ['Yes. It’s a very exclusive club.', { sis: 15 }, 'LOL. Membership: one.'],
+    ['No, he has tons of friends!', { sis: -5, mom: 10 }, 'Name one other. I’ll wait.'],
+    ['He pays me to be here.', { sis: 20, dad: -5 }, 'I KNEW IT!']] },
+  { who: 'uncle', q: 'Do you know who I am? I’m the COOL uncle.', a: [
+    ['Wow, so cool!', { uncle: 15 }, 'Finally, someone gets it!'],
+    ['You’re wearing sunglasses indoors.', { uncle: -10, sis: 15 }, 'They’re prescription. Kind of.'],
+    ['Can you teach me to be cool?', { uncle: 20, dad: -5 }, 'Lesson one: never take off the shades.']] },
+  { who: 'dad', q: 'Want to hear a joke? Why did the egg go to school? To get EGG-ucated!', a: [
+    ['HAHAHA!', { dad: 15 }, 'See? SOMEONE appreciates my comedy.'],
+    ['…That was terrible.', { dad: -10, sis: 10 }, 'Tough crowd tonight.'],
+    ['I have a better one.', { dad: 5, uncle: 5 }, 'A comedy rival! Interesting…']] },
+  { who: 'mom', q: 'And how are your grades?', a: [
+    ['All A’s.', { mom: 15, dad: 10 }, 'Shreyas, why can’t you be more like your friend?'],
+    ['We don’t talk about that.', { mom: -15 }, 'Hmm. Hmm hmm hmm.'],
+    ['Better than Shreyas’s.', { mom: 5, sis: 15 }, 'That’s not hard.']] },
+  { who: 'nani', q: 'In my day, we walked 10 miles to school.', a: [
+    ['Wow, that’s amazing, Nani.', { nani: 15 }, 'Uphill. Both ways. In the rain.'],
+    ['Did you have Wi-Fi?', { nani: -5, sis: 10 }, 'We had a rock. We threw it.'],
+    ['I walk 10 steps and need a nap.', { nani: 5, uncle: 10 }, 'Kids these days…']] },
+  { who: 'sis', q: 'Wanna see Shreyas’s baby photos?', a: [
+    ['YES. Immediately.', { sis: 20, mom: 5 }, 'Look, he wore glasses even as a baby!'],
+    ['No, that’s mean.', { sis: -10, mom: 10 }, 'Boring. Okay, nice person.'],
+    ['I’ve seen them already.', { sis: 10, uncle: 5 }, 'The bowl haircut one?! Legendary.']] },
+  { who: 'uncle', q: 'Want to invest in my business? I sell ice to penguins.', a: [
+    ['Sounds genius!', { uncle: 20, dad: -10 }, 'Finally, a visionary!'],
+    ['Penguins don’t have money.', { uncle: -10, dad: 10 }, '…Okay, back to the drawing board.'],
+    ['I can pay in eggs.', { uncle: 5, sis: 10 }, 'Deal. Shreyas, get the egg wallet.']] },
+  { who: 'mom', q: 'Do you like my cooking?', a: [
+    ['Best food I’ve ever had!', { mom: 20, nani: -5 }, 'Shh! Don’t let Nani hear that, she taught me.'],
+    ['It’s a little spicy…', { mom: -10, uncle: 5 }, 'Spicy? That was the MILD one.'],
+    ['Can I have the recipe?', { mom: 15 }, 'It’s a secret. But okay. For you.']] },
+  { who: 'dad', q: 'Do you know how to fix the Wi-Fi?', a: [
+    ['Turn it off and on again.', { dad: 15 }, 'Genius! It worked!'],
+    ['Just yell at it.', { dad: 5, uncle: 10 }, 'That’s what I’ve been doing!'],
+    ['Ask Shreyas.', { dad: -5, sis: 10 }, 'He made it worse last time.']] },
+  { who: 'nani', q: 'So, what are your plans for the future?', a: [
+    ['Study hard, Nani.', { nani: 15, mom: 10 }, 'Wise. Very wise child.'],
+    ['Eat dinner here every day.', { nani: 20, dad: -5 }, 'I’ll set a plate for you. Forever.'],
+    ['I’m literally a kid.', { nani: -5, sis: 15 }, 'So? Start planning early.']] },
+  { who: 'sis', q: 'Rock, paper, scissors. Loser does the dishes.', rps: true, a: [['Rock!'], ['Paper!'], ['Scissors!']] },
+  { who: 'mom', q: 'Shreyas says you’re a good influence.', a: [
+    ['I’m the best influence.', { mom: 10 }, 'Then why are his grades like this?'],
+    ['Shreyas is a good influence on ME.', { mom: 15, sis: -5 }, 'Aww! Really? Really really?'],
+    ['Who told him that?', { sis: 10, mom: -5 }, '…']] },
+  { who: 'dad', q: 'Let’s watch the cricket match after dinner!', a: [
+    ['Yes! Let’s go!', { dad: 15, uncle: 10 }, 'A true fan!'],
+    ['What’s cricket?', { dad: -20 }, '*Dad has left the conversation*'],
+    ['Only if there are snacks.', { dad: 5, nani: 10 }, 'Nani is already making snacks.']] },
+  { who: 'nani', q: 'Take some food home. I packed 12 boxes.', a: [
+    ['Thank you so much!', { nani: 15, mom: 5 }, 'Bring the boxes back. ALL of them.'],
+    ['I can’t carry 12 boxes!', { nani: -5, uncle: 5 }, 'Raju Uncle will drive you. Slowly.'],
+    ['Can I have 13?', { nani: 20 }, 'Finally! A real eater!']] },
+  { who: 'uncle', q: 'Guess how many push-ups I can do.', a: [
+    ['A hundred!', { uncle: 15 }, 'Correct! …On a good day. With help.'],
+    ['Zero.', { uncle: -10, sis: 15 }, 'How did you… who told you?!'],
+    ['More than Dad.', { uncle: 15, dad: -10 }, 'HA! You hear that?']] }
+];
+GAMES.push({
+  id: 'family', name: 'Meet Shreyas’s Family', tag: 'You’re over for dinner. Mom, Dad, Nani, his little sister and Raju Uncle all have questions. Make them like you!', badge: 'Funny', scoreLabel: 'Approval %',
+  howto: 'Pick your answers to win over each family member. Watch out for Nani’s endless food and Raju Uncle’s arm wrestling.',
+  thumb(c, w, h) {
+    sky(c, '#ffe9c9', '#ffd8a8');
+    const s = h * 0.13, xs = [0.14, 0.32, 0.5, 0.68, 0.86], who = ['mom', 'dad', 'nani', 'sis', 'uncle'], ys = [0.5, 0.42, 0.38, 0.42, 0.5];
+    who.forEach((m, i) => { drawFamBody(c, w * xs[i], h * ys[i], s, m); drawFam(c, w * xs[i], h * ys[i], s, m, { mood: i === 4 ? 'laugh' : i === 2 ? 'love' : 'happy' }); });
+    c.fillStyle = '#8a5a2b'; c.fillRect(0, h * 0.72, w, h * 0.28); c.fillStyle = '#fff'; [0.25, 0.5, 0.75].forEach((x) => { ell(c, w * x, h * 0.8, w * 0.08, h * 0.04); c.fill(); });
+  },
+  create(env) {
+    const WHO = ['mom', 'dad', 'nani', 'sis', 'uncle'];
+    const POS = { mom: [52, 236], dad: [128, 206], nani: [200, 194], sis: [272, 206], uncle: [348, 236] };
+    const HS = 30;
+    const ap = { mom: 50, dad: 50, nani: 50, sis: 50, uncle: 50 };
+    const mood = {}, moodT = {}; WHO.forEach((w) => { mood[w] = 'happy'; moodT[w] = 0; });
+    const qs = FAM_QS.slice().sort(() => Math.random() - 0.5);
+    const seen = new Set(); const picked = [];
+    for (const q of qs) { if (picked.length >= 7) break; const last = picked[picked.length - 1]; if (last && last.who === q.who) continue; picked.push(q); seen.add(q.who); }
+    const plan = [picked[0], picked[1], 'plate', picked[2], picked[3], 'arm', picked[4], picked[5], picked[6]];
+    const st = { t: 0, round: 0, phase: 'ask', phT: 0, talk: null, line: null, speaker: null, press: -1, mini: null, verdict: null, opts: [] };
+    const fl = floaters();
+    const bubbleFor = (who) => ({ x: POS[who][0], y: POS[who][1] - HS - 8 });
+    function speak(who, text, pitch) {
+      st.speaker = who; st.line = text;
+      const p = { mom: 1.3, dad: 0.7, nani: 1.5, sis: 1.9, uncle: 0.5, shreyas: 1.8 }[who];
+      st.talk = FUN.say(text, pitch == null ? p : pitch, who === 'nani' ? 0.9 : 1.05);
+    }
+    function apply(d) {
+      for (const w in d) {
+        ap[w] = clamp(ap[w] + d[w], 0, 100);
+        mood[w] = d[w] >= 15 ? 'love' : d[w] > 0 ? 'laugh' : 'mad'; moodT[w] = 2.6;
+        fl.add((d[w] > 0 ? '+' : '') + d[w] + (d[w] > 0 ? ' ❤' : ' 💔'), POS[w][0], POS[w][1] - HS - 18, d[w] > 0 ? '#ff8fb0' : '#9aa3b5');
+      }
+      const good = Object.values(d).reduce((a, b) => a + b, 0) > 0;
+      if (good) { FUN.tone(660, 0.1, 'triangle', 0.06); FUN.tone(880, 0.12, 'triangle', 0.06, null, 0.1); } else { FUN.tone(300, 0.2, 'triangle', 0.06, 180); }
+    }
+    function startRound() {
+      const item = plan[st.round]; st.phT = 0; st.press = -1;
+      if (item === 'plate') { st.phase = 'mini'; st.mini = { kind: 'plate', t: 0, dur: 6, bites: 0, food: 6, refill: 0.7, done: false }; speak('nani', 'You look hungry. EAT! Tap the plate fast!'); return; }
+      if (item === 'arm') { st.phase = 'mini'; st.mini = { kind: 'arm', t: 0, dur: 7, p: 0, done: false, go: 1.2 }; speak('uncle', 'Arm wrestle me! Tap as fast as you can!'); return; }
+      st.phase = 'ask'; st.cur = item;
+      st.opts = item.a.slice().sort(() => Math.random() - 0.5);
+      speak(item.who, item.q);
+    }
+    function choose(i) {
+      if (st.phase !== 'ask' || st.phT < 0.35) return;
+      const q = st.cur, o = st.opts[i]; st.press = i;
+      if (q.rps) {
+        const win = Math.random() < 0.5;
+        if (win) { apply({ sis: -5, mom: 10 }); speak('sis', 'Noooo! Fine. Shreyas does the dishes.'); }
+        else { apply({ sis: 15 }); speak('sis', 'HA! The sponge is by the sink. Good luck.'); }
+      } else { apply(o[1]); speak(q.who, o[2]); }
+      st.phase = 'react'; st.phT = 0;
+    }
+    function endMini(win) {
+      const m = st.mini; if (m.done) return; m.done = true; st.phase = 'react'; st.phT = 0;
+      if (m.kind === 'plate') {
+        if (m.bites >= 14) { apply({ nani: 20, mom: 10 }); speak('nani', m.bites >= 22 ? 'WOW. You ate like a champion. I’ll make more.' : 'Good eater! Finally, somebody eats!'); }
+        else { apply({ nani: -10 }); speak('nani', 'You barely touched it! Are you sick?'); }
+      } else {
+        if (win) { apply({ uncle: 10, dad: 10, sis: 10 }); speak('dad', 'You beat Raju Uncle?! Legend!'); }
+        else { apply({ uncle: 15, sis: 5 }); speak('uncle', 'HA! Still the champ! Good try, kid.'); }
+      }
+    }
+    function next() {
+      st.round++;
+      if (st.round >= plan.length) {
+        const avg = Math.round(WHO.reduce((a, w) => a + ap[w], 0) / WHO.length);
+        const v = avg >= 80 ? ['Adopted!', 'They like you more than Shreyas now.', 'nani', 'You’re family now. Come every Sunday!'] :
+          avg >= 62 ? ['Invited back!', 'You’re welcome at every family dinner.', 'mom', 'Come again soon, beta!'] :
+          avg >= 45 ? ['They’ll think about it…', 'The family is still deciding.', 'dad', 'Well. That was… a dinner.'] :
+          ['Banned from dinner!', 'Nani has blocked your number.', 'nani', 'Don’t come back hungry!'];
+        WHO.forEach((w) => { mood[w] = ap[w] >= 60 ? 'love' : ap[w] >= 40 ? 'happy' : 'mad'; moodT[w] = 99; });
+        st.phase = 'end'; st.phT = 0; st.verdict = { avg, title: v[0], sub: v[1] }; speak(v[2], v[3]);
+        env.score(avg); return;
+      }
+      startRound();
+    }
+    function optBox(i) { return { x: 16, y: 402 + i * 64, w: 368, h: 54 }; }
+    startRound();
+    return {
+      down(x, y) {
+        if (st.phase === 'ask') { for (let i = 0; i < 3; i++) if (inBox(x, y, optBox(i))) { choose(i); return; } }
+        else if (st.phase === 'react') { if (st.phT > 0.6) next(); }
+        else if (st.phase === 'mini' && !st.mini.done) {
+          const m = st.mini;
+          if (m.kind === 'plate' && y > 380) { if (m.food > 0) { m.food--; m.bites++; FUN.tone(rand(200, 320), 0.06, 'square', 0.05); fl.add('nom', x + rand(-20, 20), y - 10, '#fff'); } }
+          if (m.kind === 'arm' && m.go <= 0 && y > 380) { m.p = Math.min(1, m.p + 0.055); FUN.tone(rand(400, 500), 0.04, 'square', 0.04); }
+        }
+      },
+      key(code, down) {
+        if (!down) return;
+        if (st.phase === 'ask' && /^Digit[1-3]$/.test(code)) choose(+code[5] - 1);
+        if (st.phase === 'mini' && code === 'Space') this.down(200, 500);
+        if (st.phase === 'react' && (code === 'Space' || code === 'Enter')) this.down(200, 500);
+      },
+      update(dt) {
+        st.t += dt; st.phT += dt; fl.step(dt);
+        WHO.forEach((w) => { moodT[w] -= dt; if (moodT[w] <= 0) mood[w] = 'happy'; });
+        if (st.phase === 'react' && st.phT > 3.6 && (!st.talk || performance.now() > st.talk.until)) next();
+        if (st.phase === 'mini' && !st.mini.done) {
+          const m = st.mini; m.t += dt;
+          if (m.kind === 'plate') {
+            m.refill -= dt; if (m.refill <= 0) { m.refill = 0.55; if (m.food < 9) { m.food += 1; fl.add('+1 roti', 200 + rand(-60, 60), 400, C.yellow); } }
+            if (m.t >= m.dur) endMini();
+          } else {
+            if (m.go > 0) m.go -= dt; else { m.p -= (0.32 + m.t * 0.04) * dt; if (m.p >= 1) endMini(true); else if (m.p <= -1) endMini(false); if (m.t >= m.dur + 1.2) endMini(m.p > 0); }
+          }
+        }
+        if (st.phase === 'end' && st.phT > 3.4 && !st.ended) { st.ended = true; env.over(st.verdict.avg); }
+      },
+      draw(c) {
+        // dining room
+        sky(c, '#ffeacd', '#ffd9ab');
+        c.fillStyle = 'rgba(194,48,122,.08)'; for (let i = 0; i < 10; i++) { c.beginPath(); c.arc(20 + i * 42, 20, 14, 0, TAU); c.fill(); }
+        c.fillStyle = '#fff6e0'; rr(c, 150, 60, 100, 60, 6); c.fill(); c.lineWidth = 3; c.strokeStyle = '#8a5a2b'; c.stroke(); c.fillStyle = C.red; c.font = funFont(12); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('HOME SWEET', 200, 82); c.fillText('HOME', 200, 98);
+        const talking = st.talk && performance.now() < st.talk.until;
+        WHO.forEach((w) => {
+          const [x, y] = POS[w], bounce = mood[w] === 'laugh' || mood[w] === 'love' ? Math.abs(Math.sin(st.t * 10)) * -4 : 0;
+          drawFamBody(c, x, y + bounce, HS, w);
+          drawFam(c, x, y + bounce, HS, w, { mood: mood[w], mouth: talking && st.speaker === w ? 0.2 + 0.8 * Math.abs(Math.sin(st.t * 16)) : null, blink: (st.t + x) % 4 < 0.12 });
+        });
+        // table
+        c.fillStyle = '#9a6332'; rr(c, -10, 290, W + 20, 100, 10); c.fill(); c.lineWidth = 3; c.strokeStyle = C.ink; c.stroke();
+        c.fillStyle = 'rgba(255,255,255,.12)'; c.fillRect(0, 296, W, 6);
+        WHO.forEach((w) => {
+          const x = POS[w][0]; c.fillStyle = '#fff'; ell(c, x, 330, 26, 9); c.fill(); c.lineWidth = 2; c.strokeStyle = C.ink; c.stroke();
+          c.fillStyle = '#f0b44a'; ell(c, x - 6, 328, 8, 4); c.fill(); c.fillStyle = '#7bb84a'; ell(c, x + 8, 329, 6, 3); c.fill();
+          // approval bar
+          c.fillStyle = 'rgba(0,0,0,.3)'; rr(c, x - 28, 352, 56, 10, 5); c.fill();
+          c.fillStyle = ap[w] >= 60 ? '#ff6f9c' : ap[w] >= 40 ? C.yellow : '#8f97a8'; rr(c, x - 28, 352, 56 * ap[w] / 100, 10, 5); c.fill();
+          c.fillStyle = '#fff'; c.font = funFont(10); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(FAM[w].name, x, 372);
+        });
+        c.fillStyle = C.ink; c.font = funFont(12); c.textAlign = 'right'; c.fillText(`Course ${Math.min(st.round + 1, plan.length)}/${plan.length}`, 392, 14);
+        // speech
+        if (st.line && st.speaker && st.speaker !== 'shreyas' && st.phase !== 'end') {
+          const b = bubbleFor(st.speaker);
+          speechBubble(c, b.x, b.y, st.line, { maxW: 330, size: 16, title: FAM[st.speaker].name });
+        }
+        // bottom area
+        if (st.phase === 'ask') {
+          st.opts.forEach((o, i) => { const b = optBox(i); funButton(c, b.x, b.y, b.w, b.h, o[0], { fill: st.press === i ? C.yellow : '#fff', size: 16 }); });
+        } else if (st.phase === 'react') {
+          c.fillStyle = 'rgba(29,27,46,.75)'; c.font = funFont(14); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('Tap to continue', W / 2, 570);
+          drawShreyas(c, 70, 480, 34, { mood: Object.values(mood).some((m) => m === 'mad') ? 'shock' : 'grin' });
+          c.fillStyle = C.ink; c.font = funFont(13, 700); c.textAlign = 'left'; c.fillText(Object.values(mood).some((m) => m === 'mad') ? 'Shreyas: “Bro…”' : 'Shreyas: “They like you!”', 115, 480);
+        } else if (st.phase === 'mini') {
+          const m = st.mini;
+          if (m.kind === 'plate') {
+            c.fillStyle = '#fff'; ell(c, 200, 490, 130, 62); c.fill(); c.lineWidth = 4; c.strokeStyle = C.ink; c.stroke();
+            for (let i = 0; i < m.food; i++) { const a = i * 2.4, r = 14 + (i % 3) * 22; c.fillStyle = i % 2 ? '#e7b765' : '#d9973c'; ell(c, 200 + Math.cos(a) * r * 1.6, 488 + Math.sin(a) * r * 0.7, 24, 13); c.fill(); c.lineWidth = 2; c.strokeStyle = 'rgba(0,0,0,.3)'; c.stroke(); }
+            bigText(c, `Bites: ${m.bites}`, 200, 410, 30, C.yellow);
+            c.fillStyle = 'rgba(0,0,0,.2)'; rr(c, 60, 572, 280, 12, 6); c.fill(); c.fillStyle = C.red; rr(c, 60, 572, 280 * Math.max(0, 1 - m.t / m.dur), 12, 6); c.fill();
+            c.fillStyle = C.ink; c.font = funFont(12); c.textAlign = 'center'; c.fillText('Tap the plate! Eat 14 bites. She keeps refilling it…', 200, 594 - 34);
+          } else {
+            const p = m.p, cx = 200 + p * 120;
+            c.lineCap = 'round';
+            c.strokeStyle = C.ink; c.lineWidth = 34; c.beginPath(); c.moveTo(-10, 560); c.lineTo(cx - 10, 470); c.stroke(); c.strokeStyle = FAM.dad.skin; c.lineWidth = 28; c.stroke();
+            c.strokeStyle = C.ink; c.lineWidth = 40; c.beginPath(); c.moveTo(410, 560); c.lineTo(cx + 10, 470); c.stroke(); c.strokeStyle = FAM.uncle.skin; c.lineWidth = 34; c.stroke();
+            c.fillStyle = FAM.uncle.skin; c.strokeStyle = C.ink; c.lineWidth = 3; ell(c, cx, 466, 26, 22); c.fill(); c.stroke();
+            c.fillStyle = 'rgba(0,0,0,.25)'; rr(c, 60, 410, 280, 16, 8); c.fill(); c.fillStyle = C.green; rr(c, 200, 410, Math.max(0, p) * 140, 16, 8); c.fill(); c.fillStyle = C.red; const lw2 = Math.max(0, -p) * 140; rr(c, 200 - lw2, 410, lw2, 16, 8); c.fill();
+            c.fillStyle = C.ink; c.fillRect(198, 406, 4, 24);
+            c.font = funFont(12); c.textAlign = 'left'; c.fillText('YOU', 60, 444); c.textAlign = 'right'; c.fillText('RAJU UNCLE', 340, 444);
+            if (m.go > 0) bigText(c, m.go > 0.6 ? 'Ready…' : 'GO!', 200, 520, 40, C.yellow);
+            else { c.fillStyle = C.ink; c.font = funFont(14); c.textAlign = 'center'; c.fillText('TAP TAP TAP!', 200, 590); }
+          }
+        } else if (st.phase === 'end') {
+          const v = st.verdict;
+          c.fillStyle = 'rgba(29,27,46,.4)'; c.fillRect(0, 0, W, H);
+          c.fillStyle = C.ink; rr(c, 34, 236, 340, 190, 18); c.fill(); c.fillStyle = '#fff'; rr(c, 30, 230, 340, 190, 18); c.fill(); c.lineWidth = 3; c.strokeStyle = C.ink; c.stroke();
+          bigText(c, v.title, 200, 278, 36, v.avg >= 62 ? C.green : v.avg >= 45 ? C.yellow : C.red);
+          c.fillStyle = C.ink; c.font = funFont(15, 700); c.textAlign = 'center'; c.fillText(v.sub, 200, 318);
+          bigText(c, `${v.avg}% approval`, 200, 370, 30, '#ff8fb0');
+        }
+        fl.draw(c);
+      },
+      destroy() { FUN.hush(); },
+      _dbg: { st, ap, choose, next }
+    };
+  }
+});
+
+/* ---------- 38. Don't Wake Shreyas ---------- */
+GAMES.push({
+  id: 'sneak', name: 'Don’t Wake Shreyas', tag: 'He fell asleep next to his egg stash. Hold to sneak one. Let go before he opens his eyes!', badge: 'Funny', scoreLabel: 'Eggs stolen',
+  howto: 'Hold the screen (or Space) to reach for an egg. Let go as soon as Shreyas stirs. If he opens his eyes while your hand is out, you’re caught!',
+  thumb(c, w, h) {
+    sky(c, '#3a3f78', '#6b6fb0'); c.fillStyle = '#8a5a2b'; c.fillRect(0, h * 0.62, w, h * 0.38);
+    drawShreyas(c, w * 0.38, h * 0.55, h * 0.2, { blink: true, rot: -0.35 });
+    c.fillStyle = '#fff'; c.font = `800 ${h * 0.12}px Rubik, system-ui`; c.fillText('z', w * 0.55, h * 0.3); c.font = `800 ${h * 0.09}px Rubik, system-ui`; c.fillText('z', w * 0.62, h * 0.2);
+    drawEgg(c, w * 0.75, h * 0.62, h * 0.07); drawEgg(c, w * 0.82, h * 0.63, h * 0.07, true);
+    c.fillStyle = C.skin; c.strokeStyle = C.ink; c.lineWidth = 2; rr(c, w * 0.86, h * 0.5, w * 0.2, h * 0.08, 6); c.fill(); c.stroke();
+  },
+  create(env) {
+    const st = { t: 0, score: 0, hand: 0, hold: false, grab: 0, carry: false, state: 'sleep', stT: rand(2.5, 4), z: [], bubble: null, mumble: rand(2.5, 5), over: 0, wobble: 0 };
+    const fl = floaters();
+    const MUMBLE = ['mmm… eggs…', 'five more minutes, Mom…', 'no… YOU’RE a nerd…', 'my glasses… where…', 'A+… I got an A+…', 'zzz… scrambled… zzz', 'don’t touch my hair…'];
+    const speedK = () => Math.max(0.4, 1 - st.score * 0.035);
+    function setState(s, d) { st.state = s; st.stT = d; }
+    function step(dt) {
+      st.stT -= dt;
+      if (st.state === 'sleep' && st.stT <= 0) { setState('stir', clamp(1.05 - st.score * 0.025, 0.45, 1.05)); st.bubble = { text: pick(['hm?', 'huh…?', '*sniff sniff*', 'who’s there…?']), t: 0 }; FUN.tone(320, 0.2, 'sine', 0.05, 420); }
+      else if (st.state === 'stir' && st.stT <= 0) {
+        if (Math.random() < 0.3) { setState('sleep', rand(1.5, 3.5) * speedK()); st.bubble = { text: '…zzz. Fake out.', t: 0 }; }
+        else { setState('awake', rand(1.3, 2.3)); FUN.tone(880, 0.12, 'square', 0.05); }
+      } else if (st.state === 'awake') {
+        if (st.hand > 0.12) { setState('caught', 99); st.bubble = { text: 'HEY!! THOSE ARE MY EGGS!', t: 0 }; FUN.say('Hey! Those are my eggs!', 1.6); FUN.tone(200, 0.5, 'sawtooth', 0.1, 90); st.over = 1.8; return; }
+        if (st.stT <= 0) { setState('sleep', rand(1.4, 4.2) * speedK()); st.bubble = null; }
+      }
+    }
+    return {
+      down() { st.hold = true; FUN.audio(); },
+      up() { st.hold = false; },
+      key(code, down) { if (code === 'Space') st.hold = down; },
+      update(dt) {
+        st.t += dt; fl.step(dt);
+        if (st.state === 'caught') { st.over -= dt; st.hand = Math.max(0, st.hand - dt); st.wobble += dt; if (st.over <= 0 && !st.ended) { st.ended = true; env.over(st.score); } return; }
+        step(dt); if (st.state === 'caught') return;
+        if (st.carry) { st.hand -= dt * 2.6; if (st.hand <= 0) { st.hand = 0; st.carry = false; st.score++; env.score(st.score); fl.add('+1 egg', 360, 420, C.yellow); FUN.tone(660, 0.08, 'triangle', 0.07); FUN.tone(990, 0.1, 'triangle', 0.07, null, 0.08); } }
+        else if (st.hold) { st.hand = Math.min(1, st.hand + dt * 1.9); if (st.hand >= 1) { st.grab += dt; if (st.grab >= 0.35) { st.grab = 0; st.carry = true; FUN.tone(1200, 0.04, 'square', 0.04); } } }
+        else { st.hand = Math.max(0, st.hand - dt * 3.2); st.grab = 0; }
+        if (st.state === 'sleep') { st.mumble -= dt; if (st.mumble <= 0) { st.mumble = rand(3, 6); st.bubble = { text: pick(MUMBLE), t: 0 }; } if (Math.random() < dt * 1.6) st.z.push({ x: 160, y: 300, t: 0 }); }
+        st.z.forEach((z) => { z.t += dt; z.y -= 30 * dt; z.x += Math.sin(z.t * 3) * 0.6; }); st.z = st.z.filter((z) => z.t < 2.2);
+        if (st.bubble) { st.bubble.t += dt; if (st.bubble.t > 2.2) st.bubble = null; }
+      },
+      draw(c) {
+        sky(c, '#2e3266', '#545a9c');
+        c.fillStyle = '#fff8c8'; c.beginPath(); c.arc(330, 70, 28, 0, TAU); c.fill(); c.fillStyle = '#2e3266'; c.beginPath(); c.arc(318, 62, 26, 0, TAU); c.fill();
+        c.fillStyle = 'rgba(255,255,255,.8)'; for (let i = 0; i < 18; i++) { const tw = 1 + Math.sin(st.t * 3 + i) * 0.6; c.fillRect((i * 83) % 400, (i * 47) % 200, tw * 2, tw * 2); }
+        // desk
+        c.fillStyle = '#8a5a2b'; c.fillRect(0, 360, W, 240); c.fillStyle = '#9d6a36'; c.fillRect(0, 360, W, 18); c.lineWidth = 3; c.strokeStyle = C.ink; c.beginPath(); c.moveTo(0, 360); c.lineTo(W, 360); c.stroke();
+        // lamp
+        c.fillStyle = 'rgba(255,240,170,.18)'; c.beginPath(); c.moveTo(60, 120); c.lineTo(-40, 380); c.lineTo(220, 380); c.closePath(); c.fill();
+        // sleeping Shreyas
+        const s = st.state, awake = s === 'awake' || s === 'caught', stir = s === 'stir';
+        c.fillStyle = C.shirt; c.strokeStyle = C.ink; c.lineWidth = 3; rr(c, 40, 340, 220, 56, 26); c.fill(); c.stroke();
+        const breathe = s === 'sleep' ? Math.sin(st.t * 2) * 3 : 0, shake = s === 'caught' ? Math.sin(st.wobble * 50) * 4 : stir ? Math.sin(st.t * 30) * 1.5 : 0;
+        drawShreyas(c, 150 + shake, 300 + breathe + (awake ? -20 : 0), 52, { blink: s === 'sleep' || (stir && Math.sin(st.t * 18) > -0.4), mood: s === 'caught' ? 'shock' : awake ? 'shock' : 'happy', look: awake ? 1 : 0, rot: awake ? 0 : -0.32 });
+        c.fillStyle = C.skin; ell(c, 230, 360, 28, 14); c.fill(); c.stroke();
+        st.z.forEach((z) => { c.globalAlpha = 1 - z.t / 2.2; c.fillStyle = '#fff'; c.font = `800 ${16 + z.t * 10}px Rubik, system-ui`; c.textAlign = 'center'; c.fillText('z', z.x + 40, z.y - 40); c.globalAlpha = 1; });
+        // egg stash
+        c.fillStyle = '#fff'; ell(c, 320, 382, 62, 16); c.fill(); c.lineWidth = 3; c.strokeStyle = C.ink; c.stroke();
+        [[296, 364, 0], [320, 362, 1], [344, 364, 0], [308, 344, 0], [332, 344, 0], [320, 326, 1]].forEach(([x, y, g]) => drawEgg(c, x, y, 13, g));
+        // your hand
+        const e = st.hand < 0.5 ? 2 * st.hand * st.hand : 1 - Math.pow(-2 * st.hand + 2, 2) / 2, hx = 470 - 150 * e, hy = 340;
+        c.lineCap = 'round'; c.strokeStyle = C.ink; c.lineWidth = 34; c.beginPath(); c.moveTo(470, hy + 30); c.lineTo(hx + 10, hy); c.stroke(); c.strokeStyle = '#3a8fd8'; c.lineWidth = 28; c.stroke();
+        c.fillStyle = '#e0a070'; c.strokeStyle = C.ink; c.lineWidth = 3; ell(c, hx - 10, hy - 2, 20, 16); c.fill(); c.stroke();
+        for (let i = 0; i < 3; i++) { ell(c, hx - 26, hy - 12 + i * 9, 9, 5); c.fill(); c.stroke(); }
+        if (st.carry) drawEgg(c, hx - 26, hy - 18, 12);
+        if (st.grab > 0) { c.strokeStyle = C.yellow; c.lineWidth = 5; c.beginPath(); c.arc(hx - 10, hy - 2, 26, -Math.PI / 2, -Math.PI / 2 + TAU * st.grab / 0.35); c.stroke(); }
+        // status
+        const label = s === 'sleep' ? ['😴 Fast asleep', C.green] : s === 'stir' ? ['⚠️ He’s stirring! LET GO!', C.orange] : s === 'awake' ? ['👀 AWAKE! Freeze!', C.red] : ['🚨 CAUGHT!', C.red];
+        c.fillStyle = label[1]; rr(c, 70, 14, 260, 40, 14); c.fill(); c.lineWidth = 3; c.strokeStyle = C.ink; c.stroke();
+        c.fillStyle = '#fff'; c.font = funFont(17); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(label[0], 200, 35);
+        bigText(c, String(st.score), 200, 96, 44, C.yellow);
+        if (st.bubble) speechBubble(c, 170, 238, st.bubble.text, { size: s === 'caught' ? 20 : 15, maxW: 240, fill: s === 'caught' ? '#ffe1dc' : '#fff' });
+        c.fillStyle = 'rgba(255,255,255,.85)'; c.font = funFont(14); c.textAlign = 'center'; c.fillText(st.hold ? 'Sneaking…' : 'Hold to reach for an egg', 200, 560);
+        fl.draw(c);
+      },
+      destroy() { FUN.hush(); },
+      _dbg: { st, setState }
+    };
+  }
+});
+
+/* ---------- 39. Fling Shreyas ---------- */
+GAMES.push({
+  id: 'fling', name: 'Fling Shreyas', tag: 'Grab Shreyas and throw him around his room. Bonk the walls for Ouch Points. He’ll be fine. Probably.', badge: 'Funny', scoreLabel: 'Ouch points',
+  howto: 'Drag any part of Shreyas and let go to throw him. Hard hits and quick combos score more. Bounce him on the trampoline! 45 seconds.',
+  thumb(c, w, h) {
+    sky(c, '#d7f0ff', '#bfe0ff'); c.fillStyle = '#c98b52'; c.fillRect(0, h * 0.85, w, h * 0.15);
+    c.save(); c.translate(w * 0.5, h * 0.48); c.rotate(-0.6);
+    c.lineCap = 'round'; c.strokeStyle = C.pants; c.lineWidth = h * 0.06; c.beginPath(); c.moveTo(0, h * 0.1); c.lineTo(-h * 0.12, h * 0.3); c.moveTo(0, h * 0.1); c.lineTo(h * 0.14, h * 0.26); c.stroke();
+    c.strokeStyle = C.shirt; c.lineWidth = h * 0.14; c.beginPath(); c.moveTo(0, -h * 0.08); c.lineTo(0, h * 0.1); c.stroke();
+    c.lineWidth = h * 0.05; c.beginPath(); c.moveTo(0, -h * 0.06); c.lineTo(-h * 0.2, -h * 0.2); c.moveTo(0, -h * 0.06); c.lineTo(h * 0.2, -h * 0.16); c.stroke();
+    c.restore();
+    drawShreyas(c, w * 0.42, h * 0.3, h * 0.13, { mood: 'shock', rot: -0.5 });
+    bigText(c, 'OW!', w * 0.78, h * 0.25, h * 0.16, C.yellow);
+  },
+  create(env) {
+    const TOP = 70, FL = 560, G = 1500, N = 4, BOUNCE = 0.55;
+    const P = [], SK = [];
+    const pt = (x, y, r, k) => { const p = { x, y, ox: x, oy: y, r, k, cd: 0 }; P.push(p); return p; };
+    const cx = 200, cy = 420;
+    const head = pt(cx, cy - 82, 22, 'head'), neck = pt(cx, cy - 56, 6), pel = pt(cx, cy + 14, 10, 'butt'),
+      lE = pt(cx - 30, cy - 34, 6), rE = pt(cx + 30, cy - 34, 6), lH = pt(cx - 46, cy - 6, 7, 'hand'), rH = pt(cx + 46, cy - 6, 7, 'hand'),
+      lK = pt(cx - 13, cy + 54, 7), rK = pt(cx + 13, cy + 54, 7), lF = pt(cx - 15, cy + 96, 8, 'foot'), rF = pt(cx + 15, cy + 96, 8, 'foot');
+    const stick = (a, b) => SK.push({ a, b, l: Math.hypot(a.x - b.x, a.y - b.y) });
+    stick(head, neck); stick(neck, pel); stick(head, pel); stick(neck, lE); stick(lE, lH); stick(neck, rE); stick(rE, rH);
+    stick(pel, lK); stick(lK, lF); stick(pel, rK); stick(rK, rF); stick(lK, rK); stick(neck, lK); stick(neck, rK);
+    const st = { t: 45, score: 0, combo: 1, lastHit: -9, drag: null, ptr: null, prevPtr: null, glasses: false, gl: null, ouch: 0, bubble: null, ended: false, overT: 0, shake: 0, hits: 0 };
+    const fl = floaters();
+    const OUCH = ['OW!', 'OOF!', 'MY GLASSES!', 'NOT THE HAIR!', 'WHY?!', 'MOM!!', 'AAAH!', 'I’M OKAY!', 'BONK', 'MY SPINE!'];
+    const GRAB = ['Put me down!', 'Wheee… wait, no!', 'I have homework to do!', 'Careful with the hair!', 'Is this a hug?'];
+    function hit(p, speed) {
+      if (p.cd > 0 || speed < 520 || !p.k) return;
+      p.cd = 0.22; const now = 45 - st.t;
+      st.combo = now - st.lastHit < 1.1 ? Math.min(6, st.combo + 1) : 1; st.lastHit = now; st.hits++;
+      const pts = Math.round((speed - 380) / 40) * (p.k === 'head' ? 2 : 1) * st.combo;
+      st.score += pts; env.score(st.score); st.ouch = 0.6; st.shake = Math.min(10, speed / 300);
+      fl.add((p.k === 'head' ? pick(OUCH) : '+' + pts), p.x, p.y - 20, p.k === 'head' ? C.yellow : '#fff');
+      FUN.tone(clamp(900 - speed / 4, 90, 500), 0.12, 'square', 0.07, 60);
+      if (!st.glasses && p.k === 'head' && speed > 1500) { st.glasses = true; st.gl = { x: p.x, y: p.y, vx: rand(-300, 300), vy: -500, rot: 0 }; fl.add('MY GLASSES!', p.x, p.y - 50, C.red); }
+    }
+    function collide(p) {
+      const vx = p.x - p.ox, vy = p.y - p.oy; let sp = 0;
+      if (p.x < p.r) { p.x = p.r; p.ox = p.x + vx * BOUNCE; sp = Math.abs(vx); }
+      if (p.x > W - p.r) { p.x = W - p.r; p.ox = p.x + vx * BOUNCE; sp = Math.max(sp, Math.abs(vx)); }
+      if (p.y < TOP + p.r) { p.y = TOP + p.r; p.oy = p.y + vy * BOUNCE; sp = Math.max(sp, Math.abs(vy)); }
+      if (p.y > FL - p.r) {
+        const tramp = p.x > 140 && p.x < 260;
+        p.y = FL - p.r; p.oy = p.y + vy * (tramp ? 1.02 : BOUNCE); p.ox = p.x - vx * 0.82;
+        if (tramp && Math.abs(vy) * 60 * N > 260) { p.oy = p.y + Math.max(Math.abs(vy) * 1.02, 4); if (p.k === 'butt') FUN.tone(200, 0.15, 'sine', 0.06, 500); }
+        else sp = Math.max(sp, Math.abs(vy));
+      }
+      return sp;
+    }
+    function nearest(x, y) { let best = null, bd = 60; for (const p of P) { const d = Math.hypot(p.x - x, p.y - y) - p.r; if (d < bd) { bd = d; best = p; } } return best; }
+    return {
+      down(x, y) { const p = nearest(x, y); if (!p) return; st.drag = p; st.ptr = { x, y }; st.prevPtr = { x, y }; st.bubble = { text: pick(GRAB), t: 0 }; FUN.audio(); },
+      move(x, y) { if (st.drag) st.ptr = { x: clamp(x, 0, W), y: clamp(y, TOP, FL) }; },
+      up() { st.drag = null; },
+      update(dt) {
+        fl.step(dt); st.ouch = Math.max(0, st.ouch - dt); st.shake = Math.max(0, st.shake - dt * 30);
+        if (st.bubble) { st.bubble.t += dt; if (st.bubble.t > 1.8) st.bubble = null; }
+        if (!st.ended) { st.t -= dt; if (st.t <= 0) { st.t = 0; st.ended = true; st.overT = 1.4; st.drag = null; FUN.say('I’m okay!', 1.8); st.bubble = { text: 'I’m… okay…', t: 0 }; } }
+        else { st.overT -= dt; if (st.overT <= 0 && !st.done) { st.done = true; env.over(st.score); } }
+        const h = dt / N;
+        for (let s = 0; s < N; s++) {
+          for (const p of P) {
+            p.cd -= h;
+            if (p === st.drag) { const k = (s + 1) / N; const tx = st.prevPtr.x + (st.ptr.x - st.prevPtr.x) * k, ty = st.prevPtr.y + (st.ptr.y - st.prevPtr.y) * k; p.ox = p.x; p.oy = p.y; p.x = tx; p.y = ty; continue; }
+            let vx = (p.x - p.ox) * 0.998, vy = (p.y - p.oy) * 0.998; const m = Math.hypot(vx, vy); if (m > 34) { vx *= 34 / m; vy *= 34 / m; }
+            p.ox = p.x; p.oy = p.y; p.x += vx; p.y += vy + G * h * h;
+          }
+          for (let it = 0; it < 6; it++) for (const k of SK) {
+            const dx = k.b.x - k.a.x, dy = k.b.y - k.a.y, d = Math.hypot(dx, dy) || 0.001, diff = (d - k.l) / d;
+            const wa = k.a === st.drag ? 0 : k.b === st.drag ? 1 : 0.5, wb = k.b === st.drag ? 0 : k.a === st.drag ? 1 : 0.5;
+            k.a.x += dx * diff * wa; k.a.y += dy * diff * wa; k.b.x -= dx * diff * wb; k.b.y -= dy * diff * wb;
+          }
+          for (const p of P) { const sp = collide(p); if (sp) hit(p, sp / h); }
+        }
+        if (st.ptr) st.prevPtr = { x: st.ptr.x, y: st.ptr.y };
+        if (st.gl) { const g = st.gl; g.vy += 1200 * dt; g.x += g.vx * dt; g.y += g.vy * dt; g.rot += 10 * dt; if (g.y > FL - 4) { g.y = FL - 4; g.vy *= -0.3; g.vx *= 0.7; g.rot = 0; } g.x = clamp(g.x, 10, W - 10); }
+      },
+      draw(c) {
+        c.save(); if (st.shake > 0) c.translate(rand(-st.shake, st.shake), rand(-st.shake, st.shake));
+        sky(c, '#dff2ff', '#c5e4ff');
+        c.fillStyle = 'rgba(47,111,214,.07)'; for (let i = 0; i < 10; i++) c.fillRect(i * 44, TOP, 20, FL - TOP);
+        c.fillStyle = '#fff'; rr(c, 30, 120, 70, 90, 6); c.fill(); c.lineWidth = 3; c.strokeStyle = C.ink; c.stroke(); drawShreyas(c, 65, 162, 22, { mood: 'cool' });
+        c.fillStyle = '#c98b52'; c.fillRect(0, FL, W, H - FL); c.fillStyle = '#6b4a2b'; c.fillRect(0, 0, W, TOP); c.fillStyle = 'rgba(0,0,0,.1)'; for (let i = 0; i < 4; i++) c.fillRect(0, FL + 8 + i * 10, W, 2);
+        // trampoline
+        c.fillStyle = '#222'; c.fillRect(140, FL - 6, 120, 8); c.strokeStyle = C.ink; c.lineWidth = 3; c.strokeRect(140, FL - 6, 120, 8); c.fillStyle = C.blue; c.fillRect(150, FL - 4, 100, 4);
+        c.fillStyle = C.ink; c.font = funFont(10); c.textAlign = 'center'; c.fillText('BOING', 200, FL + 16);
+        if (st.gl) { const g = st.gl; c.save(); c.translate(g.x, g.y); c.rotate(g.rot); c.strokeStyle = C.ink; c.lineWidth = 3; rr(c, -16, -6, 14, 11, 3); c.stroke(); rr(c, 2, -6, 14, 11, 3); c.stroke(); c.restore(); }
+        // ragdoll
+        c.lineCap = 'round'; c.lineJoin = 'round';
+        const seg = (a, b, w, col) => { c.strokeStyle = C.ink; c.lineWidth = w + 5; c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.stroke(); c.strokeStyle = col; c.lineWidth = w; c.stroke(); };
+        const limb = (a, b, d, w, c1, c2) => { seg(a, b, w, c1); seg(b, d, w - 2, c2); };
+        limb(neck, rE, rH, 12, C.shirt, C.skin); limb(pel, rK, rF, 15, C.pants, C.pants);
+        limb(pel, lK, lF, 15, C.pants, C.pants);
+        [lF, rF].forEach((f) => { c.fillStyle = '#111'; ell(c, f.x, f.y, 11, 7); c.fill(); });
+        seg(neck, pel, 34, C.shirt);
+        limb(neck, lE, lH, 12, C.shirt, C.skin);
+        [lH, rH].forEach((hh) => { c.fillStyle = C.skin; c.strokeStyle = C.ink; c.lineWidth = 2.5; c.beginPath(); c.arc(hh.x, hh.y, 8, 0, TAU); c.fill(); c.stroke(); });
+        const rot = Math.atan2(head.y - neck.y, head.x - neck.x) + Math.PI / 2;
+        drawShreyas(c, head.x, head.y, 23, { rot, mood: st.ouch > 0 ? 'shock' : st.drag ? 'grin' : st.ended ? 'sad' : 'happy', noGlasses: st.glasses, blink: st.ended });
+        if (st.bubble) speechBubble(c, head.x, head.y - 30, st.bubble.text, { size: 14, maxW: 200, below: head.y < 200 });
+        fl.draw(c);
+        c.restore();
+        // HUD
+        c.fillStyle = '#fff'; c.font = funFont(15); c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText(`⏱ ${Math.ceil(st.t)}s`, 12, 22);
+        c.textAlign = 'right'; c.fillText(`Hits: ${st.hits}`, 388, 22);
+        bigText(c, fmt(st.score), 200, 36, 34, C.yellow);
+        if (st.combo > 1 && 45 - st.t - st.lastHit < 1.1) { c.fillStyle = C.orange; c.font = funFont(14); c.textAlign = 'center'; c.fillText(`COMBO x${st.combo}`, 200, 60); }
+        if (st.t > 42 && !st.drag) { c.fillStyle = C.ink; c.font = funFont(14); c.textAlign = 'center'; c.fillText('Grab Shreyas and throw him!', 200, 300); }
+      },
+      _dbg: { st, P, head }
+    };
+  }
+});
+
+/* ---------- 40. Excuse Machine ---------- */
+const EXC = {
+  who: [['My dog', 1], ['My little sister', 1], ['My grandma', 1], ['The wind', 1], ['A raccoon', 2], ['A pigeon', 2], ['Shreyas', 2], ['Raju Uncle', 2], ['My evil twin', 2], ['A ninja', 3], ['A time traveler', 3], ['Aliens', 3]],
+  did: [['ate', 1], ['sat on', 1], ['lost', 1], ['hid', 1], ['sold', 2], ['mailed', 2], ['laminated', 2], ['microwaved', 2], ['kidnapped', 3], ['launched', 3], ['turned into soup', 3], ['fell in love with', 3]],
+  what: [['my homework', 1], ['my pencil', 1], ['my backpack', 1], ['my glasses', 1], ['my left shoe', 2], ['the printer', 2], ['the school bus', 2], ['the Wi-Fi', 2], ['my brain', 3], ['the moon', 3], ['Tuesday', 3], ['your car', 3]]
+};
+GAMES.push({
+  id: 'excuse', name: 'Shreyas’s Excuse Machine', tag: 'Shreyas is late AGAIN. Spin the excuse machine. Wilder excuses make the class laugh harder, but don’t push the teacher too far.', badge: 'Funny', scoreLabel: 'Laughs',
+  howto: 'Tap to stop each reel and build an excuse. Wild excuses earn way more laughs but drain Ms. Grumble’s patience. Survive 10 rounds!',
+  thumb(c, w, h) {
+    sky(c, '#2f5d46', '#24493a'); c.strokeStyle = '#8a5a2b'; c.lineWidth = 6; c.strokeRect(6, 6, w - 12, h * 0.42);
+    c.fillStyle = '#fff'; c.font = `800 ${h * 0.08}px Rubik, system-ui`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('A RACCOON', w / 2, h * 0.16); c.fillText('LAMINATED MY BRAIN', w / 2, h * 0.3);
+    drawFam(c, w * 0.22, h * 0.68, h * 0.17, 'teacher', { mood: 'mad' }); drawShreyas(c, w * 0.75, h * 0.7, h * 0.17, { mood: 'grin' });
+  },
+  create(env) {
+    const ROUNDS = 10;
+    const st = { t: 0, round: 0, phase: 'spin', reels: [0, 1, 2].map((i) => ({ off: Math.random() * 12, speed: 0, stopped: false, idx: 0, bump: 0 })), patience: 10, score: 0, line: null, teacher: null, mood: 'mad', talk: null, phT: 0, gain: 0, verdictTier: 0, ended: false };
+    const fl = floaters();
+    const lists = [EXC.who, EXC.did, EXC.what];
+    function startRound() {
+      st.phase = 'spin'; st.phT = 0; st.teacher = null; st.line = null;
+      const sp = 3.2 + st.round * 0.45;
+      st.reels.forEach((r, i) => { r.stopped = false; r.speed = sp * (1 + i * 0.15); });
+      st.mood = 'mad';
+      st.talk = FUN.say(st.round === 0 ? 'Shreyas! You are late. Again. Why?' : pick(['And today?', 'Late AGAIN?', 'Explain yourself.', 'Why are you late this time?']), 1.0, 1.05);
+    }
+    function stopNext() {
+      const r = st.reels.find((x) => !x.stopped); if (!r || st.phase !== 'spin') return;
+      r.stopped = true; r.idx = ((Math.round(r.off) % 12) + 12) % 12; r.off = Math.round(r.off); r.bump = 0.25;
+      FUN.tone(520 + st.reels.indexOf(r) * 160, 0.08, 'square', 0.06);
+      if (st.reels.every((x) => x.stopped)) judge();
+    }
+    function judge() {
+      st.phase = 'judge'; st.phT = 0;
+      const parts = st.reels.map((r, i) => lists[i][r.idx]);
+      const wild = parts.reduce((a, p) => a + p[1], 0), who = parts[0][0], did = parts[1][0], what = parts[2][0];
+      const sentence = `${who} ${did} ${what}!`;
+      st.line = 'Sorry I’m late! ' + sentence;
+      st.talk = FUN.say(st.line, 1.8, 1.1);
+      let gain = wild <= 4 ? wild * 5 : wild * wild * 5, dp = wild <= 4 ? -1 : wild <= 6 ? 0 : wild === 7 ? -2 : wild === 8 ? -3 : -4, reply, mood = 'mad';
+      const tier = wild <= 4 ? 0 : wild <= 6 ? 1 : wild <= 7 ? 2 : 3;
+      reply = pick([['Boring. I’ve heard that a hundred times.', 'That’s it? Try harder.'], ['Hmm. Suspicious… but fine.', 'I’ll let it slide. This time.'], ['WHAT?! That’s ridiculous!', 'Did you just make that up?!'], ['THAT’S IT. I’m calling your mom.', 'I don’t even know what that means!']][tier]);
+      if (tier === 1) mood = 'happy'; if (tier >= 2) mood = 'shock';
+      if (who === 'My dog' && did === 'ate' && what === 'my homework') { reply = 'A classic. I respect the classics.'; gain = 60; dp = 1; mood = 'love'; }
+      if (who === 'Shreyas' && what === 'my glasses') { reply = 'Shreyas, they’re on your face.'; gain += 50; }
+      if (who === 'Aliens' && did === 'kidnapped' && what === 'your car') { reply = '…Wait. Where IS my car?!'; gain = 500; dp = 0; mood = 'shock'; }
+      if (who === 'A time traveler' && what === 'Tuesday') { reply = 'That actually explains a lot.'; gain += 120; dp = 1; mood = 'happy'; }
+      if (who === 'Shreyas' && did === 'ate') { reply = 'Shreyas. You can’t blame yourself on yourself.'; gain += 40; }
+      st.pending = { gain, dp, reply, mood, wild };
+    }
+    function reveal() {
+      const p = st.pending; st.pending = null;
+      st.teacher = p.reply; st.mood = p.mood; st.gain = p.gain; st.phT = 0;
+      st.score += p.gain; st.patience = clamp(st.patience + p.dp, 0, 10); env.score(st.score);
+      st.talk = FUN.say(p.reply, 0.9, 1.05);
+      fl.add(`😂 +${p.gain}`, 200, 300, C.yellow);
+      if (p.dp < 0) fl.add(`Patience ${p.dp}`, 90, 250, '#ff8a8a');
+      for (let i = 0; i < Math.min(6, Math.ceil(p.gain / 60)); i++) FUN.tone(rand(500, 900), 0.08, 'triangle', 0.04, rand(700, 1200), i * 0.09);
+    }
+    startRound();
+    return {
+      down() {
+        FUN.audio();
+        if (st.phase === 'spin') stopNext();
+        else if (st.phase === 'judge' && !st.pending && st.phT > 1.2) this.advance();
+      },
+      advance() {
+        st.round++;
+        if (st.patience <= 0) { st.phase = 'end'; st.phT = 0; st.endText = 'DETENTION!'; st.talk = FUN.say('Detention! For a week!', 0.9); st.mood = 'mad'; return; }
+        if (st.round >= ROUNDS) { st.phase = 'end'; st.phT = 0; st.endText = 'The bell rang!'; st.score += 100; env.score(st.score); fl.add('+100 survived!', 200, 300, C.green); st.talk = FUN.say('Saved by the bell!', 1.8); return; }
+        startRound();
+      },
+      key(code, down) { if (down && (code === 'Space' || code === 'Enter')) this.down(); },
+      update(dt) {
+        st.t += dt; st.phT += dt; fl.step(dt);
+        st.reels.forEach((r) => { if (!r.stopped) r.off = (r.off + r.speed * dt) % 12; r.bump = Math.max(0, r.bump - dt); });
+        if (st.phase === 'judge' && st.pending && st.phT > Math.max(1.8, (st.talk ? (st.talk.until - performance.now()) / 1000 + st.phT : 0))) reveal();
+        if (st.phase === 'judge' && !st.pending && st.phT > 5) this.advance();
+        if (st.phase === 'end' && st.phT > 2.6 && !st.ended) { st.ended = true; env.over(st.score); }
+      },
+      draw(c) {
+        c.fillStyle = '#f2e6cf'; c.fillRect(0, 0, W, H);
+        // chalkboard
+        c.fillStyle = '#8a5a2b'; rr(c, 8, 8, 384, 120, 8); c.fill(); c.fillStyle = '#2f5d46'; rr(c, 16, 16, 368, 104, 4); c.fill();
+        c.fillStyle = '#fff'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = funFont(14, 700); c.fillText(`Round ${Math.min(st.round + 1, ROUNDS)} of ${ROUNDS}`, 200, 34);
+        c.font = funFont(24); c.fillText(st.phase === 'spin' ? 'WHY ARE YOU LATE?' : st.phase === 'end' ? st.endText : '…', 200, 70);
+        c.font = funFont(12, 700); c.fillStyle = 'rgba(255,255,255,.75)'; c.fillText(`Laughs: ${fmt(st.score)}`, 200, 102);
+        // teacher + Shreyas
+        drawFamBody(c, 92, 200, 40, 'teacher'); drawFam(c, 92, 200, 40, 'teacher', { mood: st.mood, mouth: st.talk && performance.now() < st.talk.until && st.phase !== 'judge' ? 0.3 + 0.7 * Math.abs(Math.sin(st.t * 15)) : (st.teacher && st.talk && performance.now() < st.talk.until ? 0.3 + 0.7 * Math.abs(Math.sin(st.t * 15)) : null) });
+        c.fillStyle = C.shirt; c.strokeStyle = C.ink; c.lineWidth = 3; rr(c, 308 - 46, 200 + 34, 92, 76, 22); c.fill(); c.stroke();
+        const shTalk = st.phase === 'judge' && !st.teacher && st.talk && performance.now() < st.talk.until;
+        drawShreyas(c, 308, 200, 40, { mood: st.phase === 'end' && st.patience <= 0 ? 'sad' : 'grin', mouth: shTalk ? 0.3 + 0.7 * Math.abs(Math.sin(st.t * 17)) : null });
+        // patience
+        c.fillStyle = C.ink; c.font = funFont(11); c.textAlign = 'left'; c.fillText('MS. GRUMBLE’S PATIENCE', 20, 272);
+        c.fillStyle = 'rgba(0,0,0,.15)'; rr(c, 20, 280, 170, 12, 6); c.fill();
+        c.fillStyle = st.patience > 6 ? C.green : st.patience > 3 ? C.yellow : C.red; rr(c, 20, 280, 170 * st.patience / 10, 12, 6); c.fill();
+        // reels
+        const RX = 12, RW = 122, RY = 312, RH = 132;
+        st.reels.forEach((r, i) => {
+          const x = RX + i * (RW + 3);
+          c.fillStyle = C.ink; rr(c, x + 2, RY + 4, RW, RH, 12); c.fill(); c.fillStyle = '#fff'; rr(c, x, RY, RW, RH, 12); c.fill(); c.lineWidth = 3; c.strokeStyle = C.ink; c.stroke();
+          c.save(); rr(c, x + 2, RY + 2, RW - 4, RH - 4, 10); c.clip();
+          c.fillStyle = 'rgba(245,194,46,.35)'; c.fillRect(x, RY + RH / 2 - 20, RW, 40);
+          const bump = Math.sin(r.bump * 25) * r.bump * 12;
+          for (let k = -2; k <= 2; k++) {
+            const idxF = Math.floor(r.off) + k, frac = r.off - Math.floor(r.off), item = lists[i][((idxF % 12) + 12) % 12];
+            const y = RY + RH / 2 + (k - frac) * 40 + bump;
+            let fs = 15; c.font = funFont(fs, 800); while (c.measureText(item[0]).width > RW - 14 && fs > 10) { fs--; c.font = funFont(fs, 800); }
+            c.fillStyle = item[1] === 3 ? C.red : item[1] === 2 ? C.orange : C.ink; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(item[0], x + RW / 2, y);
+          }
+          c.restore();
+          c.fillStyle = C.ink; c.font = funFont(10); c.textAlign = 'center'; c.fillText(['WHO', 'DID WHAT', 'TO WHAT'][i], x + RW / 2, RY - 8);
+          if (r.stopped) { c.strokeStyle = C.green; c.lineWidth = 4; rr(c, x, RY, RW, RH, 12); c.stroke(); }
+        });
+        c.fillStyle = 'rgba(29,27,46,.6)'; c.font = funFont(11, 700); c.textAlign = 'center'; c.fillText('Red words are wild: more laughs, less patience', 200, RY + RH + 16);
+        // speech
+        if (st.phase === 'spin') { c.fillStyle = C.ink; c.font = funFont(18); c.textAlign = 'center'; c.fillText(`Tap to stop reel ${st.reels.filter((r) => r.stopped).length + 1}!`, 200, 500); }
+        if (st.line && !st.teacher) speechBubble(c, 300, 158, st.line, { size: 14, maxW: 300 });
+        if (st.teacher) speechBubble(c, 100, 158, st.teacher, { size: 15, maxW: 300, title: 'Ms. Grumble' });
+        if (st.phase === 'judge' && !st.pending && st.phT > 1.2) { c.fillStyle = 'rgba(29,27,46,.7)'; c.font = funFont(13); c.textAlign = 'center'; c.fillText('Tap for the next round', 200, 560); }
+        if (st.phase === 'end') bigText(c, st.endText, 200, 510, 40, st.patience <= 0 ? C.red : C.green);
+        fl.draw(c);
+      },
+      destroy() { FUN.hush(); },
+      _dbg: { st, stopNext }
+    };
+  }
+});
+
 const HORROR = {
   id: 'horror', name: 'Shreyas Horror', tag: 'Escape his house in five days. 3D. Not for the faint of heart.', badge: 'Scary', link: HORROR_URL,
   thumb(c, w, h) {
@@ -3745,7 +4689,7 @@ function refreshBoards() {
 }
 function renderLbView() {
   $('lbMode').textContent = modeText();
-  $('lbGrid').innerHTML = (FB.on ? champHTML() : '') + GAMES.map((g) => {
+  $('lbGrid').innerHTML = (FB.on ? champHTML() : '') + GAMES.filter((g) => !g.noBoard).map((g) => {
     const mine = FB.on && FB.user && FB.mine[g.id] != null ? `<span class="note">Your account best: <b>${fmt(FB.mine[g.id])}</b></span>` : '';
     return `<section class="lbcard"><h3>${esc(g.name)}</h3><div class="lbhead"><span>Top ${LB_SIZE}</span><span>${esc(g.scoreLabel || 'Score')}</span></div>${boardHTML(g.id, myId())}${mine}</section>`;
   }).join('');
@@ -3909,13 +4853,13 @@ function localNameForm(container, id, score, after) {
     if (!u) { FB.username = ''; refreshBoards(); return; }
     try { const d = await FB.fs.doc('users/' + u.uid).get(); if (d.exists) FB.username = d.data().username; } catch (e) {}
     if (!FB.username) FB.username = (u.email || '').split('@')[0];
-    await Promise.all(GAMES.map(async (g) => {
+    await Promise.all(GAMES.filter((g) => !g.noBoard).map(async (g) => {
       try { const d = await FB.fs.doc(`scores/${g.id}/entries/${u.uid}`).get(); if (d.exists) { const v = d.data().score; FB.mine[g.id] = v; if (bests[g.id] == null || v > bests[g.id]) bests[g.id] = v; } } catch (e) {}
     }));
     store.set('bests', bests);
     refreshBoards();
   });
-  GAMES.forEach((g) => {
+  GAMES.filter((g) => !g.noBoard).forEach((g) => {
     FB.fs.collection('scores').doc(g.id).collection('entries').orderBy('score', 'desc').limit(LB_SIZE).onSnapshot((snap) => {
       FB.boards[g.id] = snap.docs.map((d) => { const x = d.data(); return { id: d.id, name: x.username, score: x.score, at: x.at }; }).filter(validEntry);
       refreshBoards();
@@ -3927,6 +4871,14 @@ function localNameForm(container, id, score, after) {
 /* ======================= FEEDBACK + UPDATE LOG ======================= */
 // Newest first. Add an entry here every time an update is pushed.
 const UPDATES = [
+  { id: '2026-10-14h', date: 'Oct 14, 2026', title: '5 funny games', items: [
+    'NEW: 😂 Funny tab with five silly new games!',
+    'Talking Shreyas: talk and he repeats you in a squeaky voice (allow the microphone). Call him on the phone, feed him eggs, mess up his hair, knock off his glasses, hand him homework, or make him dance.',
+    'Meet Shreyas’s Family: you’re over for dinner. Win over Mom, Dad, Nani, his sister Anika and Raju Uncle. Survive Nani’s endless food and arm wrestle Raju Uncle.',
+    'Don’t Wake Shreyas: sneak eggs from his stash while he sleeps. Let go when he stirs!',
+    'Fling Shreyas: grab him and throw him around his room for Ouch Points. Find the trampoline.',
+    'Shreyas’s Excuse Machine: spin up ridiculous excuses for being late. Make the class laugh without getting detention.'
+  ] },
   { id: '2026-10-14g', date: 'Oct 14, 2026', title: 'Online multiplayer is here', items: [
     'NEW: 🌐 Online games! Press Find a player and you’ll be matched with the next person in the queue.',
     'Tic-Tac-Toe Online, Connect 4 Online and Rock Paper Shreyas (first to 3 rounds).',
@@ -4071,7 +5023,7 @@ $('fbClose').onclick = () => { closeModal('fbModal'); clearInterval(fbTimer); };
 // Points for placing in any game's top 10: #1 = 10 points ... #10 = 1 point.
 function champList() {
   const tally = {};
-  GAMES.forEach((g) => (FB.boards[g.id] || []).slice(0, 10).forEach((e, i) => {
+  GAMES.filter((g) => !g.noBoard).forEach((g) => (FB.boards[g.id] || []).slice(0, 10).forEach((e, i) => {
     const t = tally[e.id] || (tally[e.id] = { id: e.id, name: e.name, pts: 0, golds: 0, games: 0 });
     t.pts += 10 - i; t.games++; if (i === 0) t.golds++;
   }));
@@ -4087,7 +5039,7 @@ async function openProfile(uid, name) {
   const my = ++pfToken; openModal('pfModal');
   $('pfTitle').textContent = name || 'Player';
   $('pfBody').innerHTML = '<p class="fine">Loading…</p>';
-  const rows = await Promise.all(GAMES.map(async (g) => {
+  const rows = await Promise.all(GAMES.filter((g) => !g.noBoard).map(async (g) => {
     let score = null;
     try { const d = await FB.fs.doc(`scores/${g.id}/entries/${uid}`).get(); if (d.exists) score = d.data().score; } catch (e) {}
     const b = FB.boards[g.id] || []; const rank = b.findIndex((e) => e.id === uid);
@@ -4114,14 +5066,14 @@ let curEnv = null;
 let cur = null, inst = null, running = false, scoreNow = 0, last = 0;
 function drawThumb(cv, g) { const c = cv.getContext('2d'); const w = cv.width / 2, h = cv.height / 2; c.save(); c.scale(2, 2); g.thumb(c, w, h); c.restore(); }
 var CATS = [
-  { id: 'all', name: 'All' }, { id: 'fav', name: '★ Favorites' }, { id: 'online', name: '🌐 Online', ids: ['ottt', 'oc4', 'orps'] },
+  { id: 'all', name: 'All' }, { id: 'fav', name: '★ Favorites' }, { id: 'online', name: '🌐 Online', ids: ['ottt', 'oc4', 'orps'] }, { id: 'funny', name: '😂 Funny', ids: ['talking', 'family', 'sneak', 'fling', 'excuse'] },
   { id: 'action', name: 'Action', ids: ['egg', 'flappy', 'run', 'whack', 'snake', 'catch', 'space', 'jump', 'breakout', 'dodge', 'hop', 'adventure', 'survivors', 'racer'] },
   { id: 'brain', name: 'Brain', ids: ['2048', 'memory', 'math', 'simon', 'sweeper', 'merge', 'crush'] },
   { id: 'sports', name: 'Sports & chill', ids: ['hoops', 'pong', 'stack', 'reaction', 'fishing', 'bowling', 'golf'] },
   { id: 'strategy', name: 'Strategy & idle', ids: ['clicker', 'td'] },
   { id: 'scary', name: 'Scary', ids: ['horror'] }
 ];
-var NEW_IDS = ['ottt', 'oc4', 'orps'];
+var NEW_IDS = ['talking', 'family', 'sneak', 'fling', 'excuse'];
 var hubCat = store.get('hubCat', 'all'), hubQuery = '', favs = new Set(store.get('favs', [])), hubBuilt = false;
 function dailyGame() { const d = new Date(); const key = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); let h = key; h = ((h ^ 61) ^ (h >>> 16)) * 9; h = h ^ (h >>> 4); h = h * 0x27d4eb2d; h = h ^ (h >>> 15); return GAMES[Math.abs(h) % GAMES.length]; }
 function allCards() { return [...GAMES, HORROR]; }
@@ -4168,6 +5120,7 @@ function buildHub() {
   GAMES.forEach((g) => {
     const w = document.getElementById('cw-' + g.id); if (!w) return;
     const best = bests[g.id], top = boardFor(g.id)[0];
+    if (g.noBoard) { w.querySelector('.best').textContent = 'Just for fun, no scores'; w.querySelector('.champ').textContent = ''; return; }
     w.querySelector('.best').innerHTML = `Your ${g.id === 'clicker' ? 'lifetime' : 'best'}: <b>${best != null ? fmt(best) : '—'}</b>`;
     w.querySelector('.champ').innerHTML = `🏆 ${top ? `<b>${esc(top.name)}</b> · ${fmt(top.score)}` : 'No champion yet'}`;
   });
