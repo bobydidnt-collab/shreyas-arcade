@@ -9,3 +9,6 @@ Free browser games starring Shreyas, with player accounts and leaderboards.
 
 Hosted with GitHub Pages. Accounts use Firebase Authentication (username + password) and scores live in Cloud Firestore.
 To remove a bad score: Firebase console → Firestore → `scores/<game>/entries/<player id>` → delete.
+
+## Reading feedback
+Firebase console → Firestore Database → Data → `feedback`. Each message has the player's username, topic, message and time.

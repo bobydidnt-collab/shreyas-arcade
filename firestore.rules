@@ -27,5 +27,31 @@ service cloud.firestore {
         && (resource == null || request.resource.data.score > resource.data.score);
       allow delete: if false;
     }
+
+    // Feedback: signed-in players only, one message every 3 minutes per account.
+    // Nobody can read it from the website; the owner reads it in the Firebase console.
+    match /feedback/{id} {
+      allow read, update, delete: if false;
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['uid', 'username', 'topic', 'message', 'at'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.username == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.username
+        && request.resource.data.topic is string && request.resource.data.topic.size() <= 60
+        && request.resource.data.message is string
+        && request.resource.data.message.size() >= 3 && request.resource.data.message.size() <= 1000
+        && request.resource.data.at == request.time
+        && getAfter(/databases/$(database)/documents/feedbackLimits/$(request.auth.uid)).data.lastAt == request.time;
+    }
+    match /feedbackLimits/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['lastAt'])
+        && request.resource.data.lastAt == request.time;
+      allow update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['lastAt'])
+        && request.resource.data.lastAt == request.time
+        && request.time > resource.data.lastAt + duration.value(3, 'm');
+      allow delete: if false;
+    }
   }
 }

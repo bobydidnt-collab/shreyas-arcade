@@ -101,6 +101,22 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--blue); outline-
 .authbox input:focus-visible { outline: 3px solid var(--blue); outline-offset: 1px; }
 .authbox .err { color: var(--red); font-weight: 700; font-size: 14px; min-height: 1.2em; margin: 0; }
 .authbox .fine { font-size: 13px; color: var(--ink-soft); margin: 0; line-height: 1.4; }
+.modal { position: fixed; inset: 0; z-index: 50; background: rgba(29,27,46,.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.modal .authbox { max-width: 460px; }
+.mhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.authbox select, .authbox textarea { font: 500 16px var(--body); border: 2px solid var(--ink); border-radius: 9px; padding: 9px 11px; background: #fff; color: var(--ink); width: 100%; }
+.authbox textarea { resize: vertical; min-height: 110px; }
+.fbrow { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.thanks { font-family: var(--display); font-size: 26px; margin: 0; color: var(--green); }
+#upBtn { position: relative; }
+.dot { position: absolute; top: -5px; right: -5px; width: 14px; height: 14px; border-radius: 50%; background: var(--red); border: 2px solid var(--ink); }
+.upitem { border-top: 2px dashed rgba(29,27,46,.25); padding-top: 10px; }
+.upitem:first-child { border-top: 0; padding-top: 0; }
+.upitem h4 { font-family: var(--display); font-weight: normal; font-size: 22px; margin: 2px 0 4px; }
+.upitem ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; line-height: 1.4; }
+.update { font-size: 13px; font-weight: 800; color: var(--ink-soft); letter-spacing: .04em; text-transform: uppercase; }
+.newtag { background: var(--yellow); color: var(--ink); border: 2px solid var(--ink); border-radius: 6px; padding: 0 6px; font-size: 11px; margin-left: 6px; }
+#upList { display: flex; flex-direction: column; gap: 14px; }
 .foot { margin-top: 36px; font-size: 13px; color: var(--ink-soft); }
 
 /* ---------- game view ---------- */
@@ -153,7 +169,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--blue); outline-
     </div>
   </header>
   <div class="stats" id="stats"></div>
-  <div class="acct"><button class="btn big lbBtn" id="lbOpen">🏆 Leaderboards</button><span id="acctBox"></span></div>
+  <div class="acct"><button class="btn big lbBtn" id="lbOpen">🏆 Leaderboards</button><button class="btn" id="upBtn">📰 Updates<span class="dot" id="upDot" hidden></span></button><button class="btn" id="fbBtn">💬 Feedback</button><span id="acctBox"></span></div>
   <section id="cards" aria-label="Games"></section>
   <p class="foot" id="footNote"></p>
 </main>
@@ -174,6 +190,20 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--blue); outline-
     <button class="btn" type="button" id="authCancel">Cancel</button>
     <p class="fine">Usernames are 3–16 letters, numbers or _. There's no email, so remember your password: it can't be reset.</p>
   </form>
+</div>
+
+<div id="fbModal" class="modal" hidden>
+  <div class="authbox" role="dialog" aria-labelledby="fbTitle">
+    <div class="mhead"><h3 id="fbTitle">Send feedback</h3><button class="btn" type="button" id="fbClose">Close</button></div>
+    <div id="fbBody" style="display:flex;flex-direction:column;gap:12px"></div>
+  </div>
+</div>
+
+<div id="upModal" class="modal" hidden>
+  <div class="authbox" role="dialog" aria-labelledby="upTitle">
+    <div class="mhead"><h3 id="upTitle">What's new</h3><button class="btn" type="button" id="upClose">Close</button></div>
+    <div id="upList"></div>
+  </div>
 </div>
 
 <section id="lbView" hidden>
@@ -1785,6 +1815,110 @@ function localNameForm(container, id, score, after) {
   });
   refreshBoards();
 })();
+
+/* ======================= FEEDBACK + UPDATE LOG ======================= */
+// Newest first. Add an entry here every time an update is pushed.
+const UPDATES = [
+  { id: '2026-10-14b', date: 'Oct 14, 2026', title: 'Feedback and update log', items: [
+    'New Feedback button: tell us about bugs, ideas or new games you want. Log in to send it.',
+    'New Updates button (you’re reading it) so you can see what changed.'
+  ] },
+  { id: '2026-10-14a', date: 'Oct 14, 2026', title: '6 new games', items: [
+    'Shreyas Breakout: smash a wall of textbooks.',
+    'Shreyas Pong: beat Robo-Shreyas at table tennis.',
+    'Shreyas Says: copy the pattern of flashing pads.',
+    'Shreyas Dodge: survive falling pencils, rulers and basketballs.',
+    'Shreyas Reaction: tap the instant the screen turns green.',
+    'Shreyas Hop: cross busy school roads and rivers.'
+  ] },
+  { id: '2026-10-14', date: 'Oct 14, 2026', title: 'Accounts and online leaderboards', items: [
+    'Shreyas Arcade has its own website now.',
+    'Make an account with a username and password.',
+    'Your best score in every game saves to your account.',
+    'Top 10 leaderboards for every game, shared with everyone.'
+  ] },
+  { id: '2026-10-13b', date: 'Oct 13, 2026', title: '7 new games', items: [
+    'Shreyas Stack, Shreyas 2048, Shreyas Memory, Shreyas Egg Catch, Shreyas in Space, Shreyas Math Sprint and Shreyas Jump.'
+  ] },
+  { id: '2026-10-13', date: 'Oct 13, 2026', title: 'Shreyas Arcade opens', items: [
+    'Shreyas Clicker, Steal an Egg for Shreyas, Shreyas Basketball, Flappy Shreyas, Shreyas Run, Whack-a-Shreyas and Shreyas Snake.',
+    'Shreyas Horror, the 3D escape game.'
+  ] }
+];
+const FEEDBACK_COOLDOWN_MS = 3 * 60 * 1000;
+
+function openModal(id) { $(id).hidden = false; }
+function closeModal(id) { $(id).hidden = true; }
+['fbModal', 'upModal'].forEach((id) => {
+  $(id).addEventListener('click', (e) => { if (e.target === $(id)) closeModal(id); });
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeModal('fbModal'); closeModal('upModal'); } });
+
+/* ---------- update log ---------- */
+function seenUpdate() { return store.get('seenUpdate', ''); }
+function renderUpdateDot() { const dot = $('upDot'); if (dot) dot.hidden = seenUpdate() === UPDATES[0].id; }
+function renderUpdates() {
+  $('upList').innerHTML = UPDATES.map((u, i) => `<article class="upitem"><div class="update">${esc(u.date)}${i === 0 ? ' <span class="newtag">Latest</span>' : ''}</div><h4>${esc(u.title)}</h4><ul>${u.items.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></article>`).join('');
+}
+$('upBtn').onclick = () => { renderUpdates(); openModal('upModal'); store.set('seenUpdate', UPDATES[0].id); renderUpdateDot(); };
+$('upClose').onclick = () => closeModal('upModal');
+renderUpdateDot();
+
+/* ---------- feedback ---------- */
+let fbTimer = null;
+function fbRemaining() { const last = store.get('fbLast', 0); return Math.max(0, last + FEEDBACK_COOLDOWN_MS - Date.now()); }
+function mmss(ms) { const s = Math.ceil(ms / 1000); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+function renderFeedback() {
+  const body = $('fbBody'); clearInterval(fbTimer);
+  if (!FB.on) { body.innerHTML = '<p class="fine">Feedback isn’t available right now. Try again later.</p>'; return; }
+  if (!FB.user) {
+    body.innerHTML = '<p class="fine">Log in to send feedback. It keeps the inbox free of spam.</p><div class="tabs"><button class="btn go" type="button" id="fbLogin">Log in</button><button class="btn" type="button" id="fbSignup">Sign up</button></div>';
+    body.querySelector('#fbLogin').onclick = () => { closeModal('fbModal'); openAuth('login'); };
+    body.querySelector('#fbSignup').onclick = () => { closeModal('fbModal'); openAuth('signup'); };
+    return;
+  }
+  const opts = ['General', ...GAMES.map((g) => g.name), 'Shreyas Horror'].map((n) => `<option>${esc(n)}</option>`).join('');
+  body.innerHTML = `<label>What’s it about?<select id="fbTopic">${opts}</select></label>
+    <label>Your feedback<textarea id="fbText" maxlength="1000" rows="5" placeholder="Bugs, ideas, new games you want…"></textarea></label>
+    <div class="fbrow"><span class="fine" id="fbCount">0 / 1000</span><span class="fine">Sending as <b id="fbWho"></b></span></div>
+    <p class="err" id="fbErr" role="alert"></p>
+    <button class="btn go big" type="button" id="fbSend">Send feedback</button>`;
+  body.querySelector('#fbWho').textContent = FB.username || 'player';
+  const ta = body.querySelector('#fbText'), send = body.querySelector('#fbSend');
+  ta.oninput = () => { body.querySelector('#fbCount').textContent = ta.value.length + ' / 1000'; };
+  const tick = () => {
+    const left = fbRemaining();
+    if (left > 0) { send.disabled = true; send.textContent = 'You can send again in ' + mmss(left); }
+    else { send.disabled = false; send.textContent = 'Send feedback'; clearInterval(fbTimer); }
+  };
+  tick(); fbTimer = setInterval(tick, 1000);
+  send.onclick = async () => {
+    const msg = ta.value.trim(); const err = body.querySelector('#fbErr');
+    if (msg.length < 3) { err.textContent = 'Write a little more first.'; return; }
+    if (fbRemaining() > 0) return;
+    send.disabled = true; send.textContent = 'Sending…'; err.textContent = '';
+    try {
+      const ts = firebase.firestore.FieldValue.serverTimestamp();
+      const batch = FB.fs.batch();
+      batch.set(FB.fs.doc('feedbackLimits/' + FB.user.uid), { lastAt: ts });
+      batch.set(FB.fs.collection('feedback').doc(), { uid: FB.user.uid, username: FB.username, topic: body.querySelector('#fbTopic').value, message: msg.slice(0, 1000), at: ts });
+      await batch.commit();
+      store.set('fbLast', Date.now());
+      body.innerHTML = '<p class="thanks">Thanks! Your feedback was sent.</p><p class="fine">You can send more in 3 minutes.</p>';
+    } catch (e) {
+      const code = (e && e.code) || '';
+      if (code === 'permission-denied') { store.set('fbLast', Date.now()); err.textContent = 'You sent feedback a moment ago. Wait a few minutes and try again.'; }
+      else err.textContent = 'Couldn’t send it. Check your internet and try again.';
+      tick();
+    }
+  };
+}
+async function syncCooldown() {
+  if (!FB.on || !FB.user) return;
+  try { const d = await FB.fs.doc('feedbackLimits/' + FB.user.uid).get(); if (d.exists && d.data().lastAt && d.data().lastAt.toMillis) store.set('fbLast', Math.max(store.get('fbLast', 0), d.data().lastAt.toMillis())); } catch (e) {}
+}
+$('fbBtn').onclick = async () => { renderFeedback(); openModal('fbModal'); await syncCooldown(); if (!$('fbModal').hidden && FB.user) renderFeedback(); };
+$('fbClose').onclick = () => { closeModal('fbModal'); clearInterval(fbTimer); };
 
 /* ======================= SHELL ======================= */
 const canvas = $('game'), ctx = canvas.getContext('2d');
