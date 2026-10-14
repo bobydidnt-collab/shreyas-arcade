@@ -2235,6 +2235,21 @@ function renderAccount() {
   }
 }
 
+/* ---------- username rules ---------- */
+// Keep these lists in sync with firestore.rules (the server enforces them too).
+const NAME_RESERVED = ['shreyas', 'realshreyas', 'theshreyas', 'therealshreyas', 'shreyasofficial', 'officialshreyas', 'shreyasreal', 'imshreyas', 'iamshreyas', 'itsshreyas', 'admin', 'administrator', 'moderator', 'mod', 'owner', 'staff', 'system', 'support', 'developer', 'dev'];
+const NAME_BAD_PARTS = ['fuck', 'fuk', 'fck', 'shit', 'bitch', 'cunt', 'nigg', 'niga', 'faggot', 'fagot', 'retard', 'whore', 'slut', 'porn', 'penis', 'vagina', 'pussy', 'dildo', 'rapist', 'nazi', 'hitler', 'kkk', 'asshole', 'bastard', 'boob', 'horny', 'sex', 'jizz', 'twat', 'wank', 'molest', 'pedophile', 'killyourself', 'tranny', 'chink', 'wetback', 'dyke', 'beaner', 'motherf', 'dumbass', 'jackass', 'testicle', 'nude', 'naked'];
+const NAME_BAD_EXACT = ['ass', 'cock', 'cum', 'tits', 'pedo', 'fag', 'hoe', 'spic', 'coon', 'anal', 'rape', 'kys', 'dick', 'butt', 'poop', 'pee'];
+function normName(n) { return String(n).toLowerCase().replace(/_/g, '').replace(/0/g, 'o').replace(/1/g, 'i').replace(/3/g, 'e').replace(/4/g, 'a').replace(/5/g, 's').replace(/7/g, 't').replace(/8/g, 'b').replace(/9/g, 'g'); }
+function nameProblem(name) {
+  const n = normName(name), letters = n.replace(/[0-9]/g, ''), plain = String(name).toLowerCase().replace(/[_0-9]/g, ''), trail = normName(String(name).replace(/_/g, '').replace(/[0-9]+$/, '')).replace(/[0-9]/g, ''), squashed = n.replace(/(.)\1+/g, '$1');
+  if ([letters, plain, trail].some((v) => NAME_RESERVED.includes(v))) return 'That name is reserved. Pick something else.';
+  if ([letters, plain, trail, squashed.replace(/[0-9]/g, '')].some((v) => NAME_BAD_EXACT.includes(v))) return 'That username isn’t allowed. Please pick something else.';
+  if (NAME_BAD_PARTS.some((w) => n.includes(w) || squashed.includes(w))) return 'That username isn’t allowed. Please pick something else.';
+  return '';
+}
+const loginKey = (name) => name.toLowerCase().replace(/_/g, '');
+
 /* ---------- auth modal ---------- */
 let authMode = 'login', pending = null, authAfter = null;
 function setAuthMode(m) {
@@ -2262,7 +2277,8 @@ $('authCancel').onclick = () => { closeAuth(); pending = null; };
 $('authModal').addEventListener('click', (e) => { if (e.target === $('authModal')) { closeAuth(); pending = null; } });
 function authError(e) {
   const c = (e && e.code) || '';
-  if (c === 'auth/email-already-in-use') return 'That username is taken. Try another one.';
+  if (c === 'auth/email-already-in-use') return 'That username is taken (or one too close to it). Try another one.';
+  if (c === 'permission-denied') return 'That username isn’t allowed. Please pick something else.';
   if (c === 'auth/invalid-credential' || c === 'auth/wrong-password' || c === 'auth/user-not-found' || c === 'auth/invalid-login-credentials') return 'Wrong username or password.';
   if (c === 'auth/weak-password') return 'Your password needs at least 6 characters.';
   if (c === 'auth/too-many-requests') return 'Too many tries. Wait a minute and try again.';
@@ -2276,7 +2292,8 @@ $('authForm').onsubmit = async (ev) => {
   if (!/^[A-Za-z0-9_]{3,16}$/.test(name)) { $('authErr').textContent = 'Usernames are 3–16 letters, numbers or _ (no spaces).'; return; }
   if (pass.length < 6) { $('authErr').textContent = 'Your password needs at least 6 characters.'; return; }
   if (authMode === 'signup' && pass !== $('authPass2').value) { $('authErr').textContent = 'The two passwords don’t match.'; return; }
-  const email = name.toLowerCase() + '@' + EMAIL_DOMAIN;
+  if (authMode === 'signup') { const prob = nameProblem(name); if (prob) { $('authErr').textContent = prob; return; } }
+  const email = loginKey(name) + '@' + EMAIL_DOMAIN;
   $('authGo').disabled = true; $('authErr').textContent = '';
   try {
     if (authMode === 'signup') {
@@ -2377,6 +2394,11 @@ function localNameForm(container, id, score, after) {
 /* ======================= FEEDBACK + UPDATE LOG ======================= */
 // Newest first. Add an entry here every time an update is pushed.
 const UPDATES = [
+  { id: '2026-10-14d', date: 'Oct 14, 2026', title: 'Fairer usernames', items: [
+    'Usernames have to be unique. Names that only differ by capital letters or underscores count as the same name.',
+    'Nobody can sign up as Shreyas (or pretend to be him, an admin or a moderator).',
+    'Rude or inappropriate usernames are blocked.'
+  ] },
   { id: '2026-10-14c', date: 'Oct 14, 2026', title: 'Clicker 2.0 and 3 big new games', items: [
     'Shreyas Clicker rebuilt: 11 buildings, 60+ upgrades, 50 awards, golden egg frenzies, buy ×10 or Max, and a news ticker.',
     'Graduate in the clicker to earn diplomas: each one is +5% forever.',

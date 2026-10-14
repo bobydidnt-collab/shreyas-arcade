@@ -8,3 +8,5 @@ Static site on GitHub Pages (https://bobydidnt-collab.github.io/shreyas-arcade/)
 - Leaderboards: `scores/<gameId>/entries/<uid>`; game ids must be lowercase letters/digits (rules enforce it).
 - Feedback lands in Firestore `feedback` (owner reads it in the Firebase console). One message per account every 3 minutes, enforced by `firestore.rules`.
 - If `firestore.rules` changes, the owner must paste it into Firebase console → Firestore → Rules → Publish.
+- Username rules live in two places that must match: `nameProblem()` / `NAME_*` lists in `index.html` and `nameAllowed()` in `firestore.rules`.
+  Login emails are `<username lowercased, underscores removed>@players.shreyas-arcade.game`, so names differing only by case/underscores collide.
