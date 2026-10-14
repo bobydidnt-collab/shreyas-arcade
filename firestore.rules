@@ -17,8 +17,7 @@ service cloud.firestore {
     match /scores/{game}/entries/{uid} {
       allow read: if true;
       allow create, update: if request.auth != null && request.auth.uid == uid
-        && game in ['clicker', 'egg', 'hoops', 'flappy', 'run', 'whack', 'snake',
-                    'stack', '2048', 'memory', 'catch', 'space', 'math', 'jump']
+        && game.matches('^[a-z0-9]{1,20}$')
         && request.resource.data.keys().hasOnly(['username', 'score', 'at'])
         && request.resource.data.score is number
         && request.resource.data.score >= 0
