@@ -2717,6 +2717,406 @@ GAMES.push({
   }
 });
 
+
+/* ---------- 28. Shreyas Crush (match-3) ---------- */
+GAMES.push({
+  id: 'crush', name: 'Shreyas Crush', tag: 'Swap and match 3 or more. Line up 4 for a striped zapper, 5 for a Shreyas bomb. 30 moves.', badge: 'Puzzle', scoreLabel: 'Points',
+  howto: 'Tap a piece, then tap a piece next to it to swap (or swipe). Match 3+ in a row. 4 in a row makes a striped piece that clears a whole line. 5 in a row makes a Shreyas bomb: swap it with anything to clear every piece of that kind. You have 30 moves.',
+  thumb(c, w, h) {
+    c.fillStyle = '#ffd9ef'; c.fillRect(0, 0, w, h);
+    const s = 34, cols = ['#e2483b', '#2f6fd6', '#2f9e5b', '#f5c22e', '#8e5bd6', '#f08a2c'];
+    for (let r = 0; r < 4; r++) for (let q = 0; q < 6; q++) { const t = (r * 7 + q * 3) % 6; c.fillStyle = cols[t]; c.strokeStyle = C.ink; c.lineWidth = 2; ell(c, 20 + q * s + s / 2 - 4, 14 + r * s + s / 2, 13, 13); c.fill(); c.stroke(); }
+    drawShreyas(c, w * 0.5, h * 0.55, 22, { mood: 'grin' });
+  },
+  create(env) {
+    const N = 8, CS = 46, OX = 16, OY = 112, TYPES = 6, COLS = ['#e2483b', '#2f6fd6', '#2f9e5b', '#f5c22e', '#8e5bd6', '#f08a2c'];
+    let g = [], sel = null, phase = 'idle', timer = 0, score = 0, moves = 30, combo = 0, swipe = null, swapAnim = null, t = 0, ended = false, flashCells = [];
+    const fl = floaters();
+    const rnd = () => Math.floor(Math.random() * TYPES);
+    function make(tp) { return { t: tp, sp: null, dy: 0 }; }
+    for (let r = 0; r < N; r++) { g.push([]); for (let q = 0; q < N; q++) { let tp; do { tp = rnd(); } while ((q >= 2 && g[r][q - 1].t === tp && g[r][q - 2].t === tp) || (r >= 2 && g[r - 1][q].t === tp && g[r - 2][q].t === tp)); g[r].push(make(tp)); } }
+    function findRuns() {
+      const runs = [];
+      for (let r = 0; r < N; r++) { let q = 0; while (q < N) { const tp = g[r][q] && g[r][q].t; let e = q + 1; if (tp >= 0) while (e < N && g[r][e] && g[r][e].t === tp) e++; if (tp >= 0 && e - q >= 3) runs.push({ cells: Array.from({ length: e - q }, (_, i) => [r, q + i]), dir: 'h' }); q = e; } }
+      for (let q = 0; q < N; q++) { let r = 0; while (r < N) { const tp = g[r][q] && g[r][q].t; let e = r + 1; if (tp >= 0) while (e < N && g[e][q] && g[e][q].t === tp) e++; if (tp >= 0 && e - r >= 3) runs.push({ cells: Array.from({ length: e - r }, (_, i) => [r + i, q]), dir: 'v' }); r = e; } }
+      return runs;
+    }
+    function hasMove() {
+      for (let r = 0; r < N; r++) for (let q = 0; q < N; q++) for (const [dr, dq] of [[0, 1], [1, 0]]) {
+        const r2 = r + dr, q2 = q + dq; if (r2 >= N || q2 >= N) continue;
+        if (g[r][q].t < 0 || g[r2][q2].t < 0) return true;
+        [g[r][q], g[r2][q2]] = [g[r2][q2], g[r][q]]; const ok = findRuns().length > 0; [g[r][q], g[r2][q2]] = [g[r2][q2], g[r][q]]; if (ok) return true;
+      }
+      return false;
+    }
+    function shuffle() { const all = g.flat().filter((x) => x.t >= 0 && !x.sp); for (let r = 0; r < N; r++) for (let q = 0; q < N; q++) if (g[r][q].t >= 0 && !g[r][q].sp) g[r][q] = make(rnd()); if (findRuns().length) shuffle(); fl.add('Shuffle!', 200, 300, '#fff'); }
+    let lastSwap = null;
+    function resolve() {
+      const runs = findRuns(); if (!runs.length) return false;
+      combo++; const clear = new Set(); const makeSp = [];
+      for (const run of runs) {
+        run.cells.forEach(([r, q]) => clear.add(r * N + q));
+        if (run.cells.length >= 4) {
+          let at = run.cells[Math.floor(run.cells.length / 2)];
+          if (lastSwap) for (const c2 of run.cells) if (lastSwap.some(([a, b]) => a === c2[0] && b === c2[1])) at = c2;
+          makeSp.push({ at, sp: run.cells.length >= 5 ? 'bomb' : run.dir === 'h' ? 'col' : 'row', t: g[at[0]][at[1]].t });
+        }
+      }
+      // specials caught in the clear fire too
+      const queue = [...clear]; const seen = new Set(queue);
+      while (queue.length) {
+        const k = queue.pop(), r = Math.floor(k / N), q = k % N, cell = g[r][q]; if (!cell || !cell.sp || cell.sp === 'bomb') continue;
+        const add = (rr, qq) => { const kk = rr * N + qq; if (!seen.has(kk)) { seen.add(kk); clear.add(kk); queue.push(kk); } };
+        if (cell.sp === 'row') for (let i = 0; i < N; i++) add(r, i); else for (let i = 0; i < N; i++) add(i, q);
+        flashCells.push({ r, q, sp: cell.sp, t: 0 });
+      }
+      makeSp.forEach((m) => clear.delete(m.at[0] * N + m.at[1]));
+      const pts = clear.size * 10 * combo + makeSp.length * 40; score += pts; env.score(score);
+      fl.add((combo > 1 ? `x${combo} ` : '') + '+' + pts, 200, OY - 20, combo > 1 ? C.yellow : '#fff');
+      clear.forEach((k) => { g[Math.floor(k / N)][k % N] = null; });
+      makeSp.forEach((m) => { g[m.at[0]][m.at[1]] = { t: m.sp === 'bomb' ? -1 : m.t, sp: m.sp, dy: 0 }; });
+      gravity(); return true;
+    }
+    function gravity() {
+      for (let q = 0; q < N; q++) {
+        let write = N - 1;
+        for (let r = N - 1; r >= 0; r--) if (g[r][q]) { const cell = g[r][q]; g[r][q] = null; cell.dy += (write - r) * CS; g[write][q] = cell; write--; }
+        for (let r = write, k = 1; r >= 0; r--, k++) { const cell = make(rnd()); cell.dy = (write + 1) * CS + k * 6; g[r][q] = cell; }
+      }
+      phase = 'fall';
+    }
+    function bombSwap(a, b) {
+      const [ra, qa] = a, [rb, qb] = b, A = g[ra][qa], Bc = g[rb][qb];
+      const clear = new Set();
+      if (A.sp === 'bomb' && Bc.sp === 'bomb') { for (let r = 0; r < N; r++) for (let q = 0; q < N; q++) clear.add(r * N + q); }
+      else { const target = A.sp === 'bomb' ? Bc.t : A.t; clear.add(ra * N + qa); clear.add(rb * N + qb); for (let r = 0; r < N; r++) for (let q = 0; q < N; q++) if (g[r][q].t === target) clear.add(r * N + q); }
+      const pts = clear.size * 20; score += pts; env.score(score); fl.add('SHREYAS BOMB +' + pts, 200, OY - 20, C.yellow);
+      clear.forEach((k) => { g[Math.floor(k / N)][k % N] = null; }); combo = 1; gravity();
+    }
+    function trySwap(a, b) {
+      if (phase !== 'idle' || moves <= 0) return;
+      const [ra, qa] = a, [rb, qb] = b; if (Math.abs(ra - rb) + Math.abs(qa - qb) !== 1) { sel = b; return; }
+      sel = null; moves--;
+      if (g[ra][qa].sp === 'bomb' || g[rb][qb].sp === 'bomb') { bombSwap(a, b); return; }
+      [g[ra][qa], g[rb][qb]] = [g[rb][qb], g[ra][qa]]; lastSwap = [a, b]; combo = 0;
+      swapAnim = { a, b, t: 0 };
+      if (!findRuns().length) { [g[ra][qa], g[rb][qb]] = [g[rb][qb], g[ra][qa]]; moves++; swapAnim.back = true; fl.add('No match', 200, OY - 20, '#fff'); }
+      phase = 'swap';
+    }
+    const cellAt = (x, y) => { const q = Math.floor((x - OX) / CS), r = Math.floor((y - OY) / CS); return r >= 0 && q >= 0 && r < N && q < N ? [r, q] : null; };
+    function drawPiece(c, x, y, cell, s) {
+      if (!cell) return; const R = 18 * s;
+      if (cell.sp === 'bomb') { c.fillStyle = '#ffd23f'; c.strokeStyle = C.ink; c.lineWidth = 2.5; ell(c, x, y, R + 2, R + 2); c.fill(); c.stroke(); drawShreyas(c, x, y + 1, R * 0.82, { mood: 'cool', thin: true }); return; }
+      const col = COLS[cell.t]; c.fillStyle = col; c.strokeStyle = C.ink; c.lineWidth = 2.5;
+      const tp = cell.t;
+      if (tp === 0) { ell(c, x, y, R, R); c.fill(); c.stroke(); c.fillStyle = '#2f9e5b'; ell(c, x + 3, y - R, 4, 6); c.fill(); }
+      else if (tp === 1) { c.beginPath(); for (let i = 0; i < 6; i++) { const a = i / 6 * TAU + Math.PI / 6; i ? c.lineTo(x + Math.cos(a) * R, y + Math.sin(a) * R) : c.moveTo(x + Math.cos(a) * R, y + Math.sin(a) * R); } c.closePath(); c.fill(); c.stroke(); }
+      else if (tp === 2) { rr(c, x - R * 0.85, y - R * 0.85, R * 1.7, R * 1.7, 6); c.fill(); c.stroke(); }
+      else if (tp === 3) { c.beginPath(); for (let i = 0; i < 10; i++) { const a = i / 10 * TAU - Math.PI / 2, rr2 = i % 2 ? R * 0.45 : R; i ? c.lineTo(x + Math.cos(a) * rr2, y + Math.sin(a) * rr2) : c.moveTo(x + Math.cos(a) * rr2, y + Math.sin(a) * rr2); } c.closePath(); c.fill(); c.stroke(); }
+      else if (tp === 4) { c.beginPath(); c.moveTo(x, y - R); c.lineTo(x + R, y); c.lineTo(x, y + R); c.lineTo(x - R, y); c.closePath(); c.fill(); c.stroke(); }
+      else { c.beginPath(); c.ellipse(x, y, R * 0.78, R, 0, 0, TAU); c.fill(); c.stroke(); }
+      c.fillStyle = 'rgba(255,255,255,.45)'; ell(c, x - R * 0.35, y - R * 0.35, R * 0.22, R * 0.16); c.fill();
+      if (cell.sp === 'row' || cell.sp === 'col') { c.strokeStyle = '#fff'; c.lineWidth = 3; c.beginPath(); for (let i = -1; i <= 1; i++) { if (cell.sp === 'row') { c.moveTo(x - R * 0.8, y + i * 6); c.lineTo(x + R * 0.8, y + i * 6); } else { c.moveTo(x + i * 6, y - R * 0.8); c.lineTo(x + i * 6, y + R * 0.8); } } c.stroke(); }
+    }
+    return {
+      down(x, y) { const c2 = cellAt(x, y); if (!c2) return; swipe = { x, y, c: c2 }; if (sel && (sel[0] !== c2[0] || sel[1] !== c2[1])) { trySwap(sel, c2); swipe = null; } else sel = c2; },
+      move(x, y) { if (!swipe) return; const dx = x - swipe.x, dy = y - swipe.y; if (Math.max(Math.abs(dx), Math.abs(dy)) > 22) { const [r, q] = swipe.c; const to = Math.abs(dx) > Math.abs(dy) ? [r, q + Math.sign(dx)] : [r + Math.sign(dy), q]; swipe = null; if (to[0] >= 0 && to[1] >= 0 && to[0] < N && to[1] < N) trySwap([r, q], to); } },
+      up() { swipe = null; },
+      update(dt) {
+        t += dt; fl.step(dt); flashCells.forEach((f) => f.t += dt); flashCells = flashCells.filter((f) => f.t < 0.35);
+        if (phase === 'swap') { swapAnim.t += dt * 6; if (swapAnim.t >= 1) { swapAnim = null; if (!resolve()) phase = 'idle'; } }
+        else if (phase === 'fall') {
+          let moving = false; for (let r = 0; r < N; r++) for (let q = 0; q < N; q++) { const cell = g[r][q]; if (cell && cell.dy > 0) { cell.dy = Math.max(0, cell.dy - dt * 900); moving = true; } }
+          if (!moving) { lastSwap = lastSwap && combo ? lastSwap : null; if (!resolve()) { phase = 'idle'; lastSwap = null; if (!hasMove()) shuffle(); } }
+        }
+        if (phase === 'idle' && moves <= 0 && !ended) { ended = true; setTimeout(() => env.over(score), 900); }
+      },
+      draw(c) {
+        sky(c, '#ffd9ef', '#ffeedd');
+        bigText(c, String(score), 120, 52, 40, '#fff');
+        c.fillStyle = C.ink; c.font = '800 14px Rubik, sans-serif'; c.textAlign = 'center'; c.fillText('MOVES', 310, 34);
+        bigText(c, String(moves), 310, 66, 34, moves <= 5 ? C.red : C.yellow);
+        c.fillStyle = 'rgba(255,255,255,.6)'; rr(c, OX - 6, OY - 6, N * CS + 12, N * CS + 12, 14); c.fill(); c.strokeStyle = C.ink; c.lineWidth = 3; c.stroke();
+        for (let r = 0; r < N; r++) for (let q = 0; q < N; q++) { if ((r + q) % 2) { c.fillStyle = 'rgba(29,27,46,.05)'; c.fillRect(OX + q * CS, OY + r * CS, CS, CS); } }
+        c.save(); c.beginPath(); c.rect(OX - 4, OY - 4, N * CS + 8, N * CS + 8); c.clip();
+        for (let r = 0; r < N; r++) for (let q = 0; q < N; q++) {
+          const cell = g[r][q]; if (!cell) continue; let x = OX + q * CS + CS / 2, y = OY + r * CS + CS / 2 - cell.dy;
+          if (swapAnim) { const k = swapAnim.back ? Math.sin(swapAnim.t * Math.PI) : 1 - swapAnim.t; const [a, b] = [swapAnim.a, swapAnim.b]; if (r === a[0] && q === a[1]) { x += (b[1] - a[1]) * CS * k; y += (b[0] - a[0]) * CS * k; } if (r === b[0] && q === b[1]) { x += (a[1] - b[1]) * CS * k; y += (a[0] - b[0]) * CS * k; } }
+          const isSel = sel && sel[0] === r && sel[1] === q;
+          if (isSel) { c.fillStyle = 'rgba(255,255,255,.9)'; rr(c, OX + q * CS + 3, OY + r * CS + 3, CS - 6, CS - 6, 10); c.fill(); }
+          drawPiece(c, x, y, cell, isSel ? 1.08 + Math.sin(t * 10) * 0.04 : 1);
+        }
+        for (const f of flashCells) { c.fillStyle = `rgba(255,255,255,${0.8 - f.t * 2})`; if (f.sp === 'row') c.fillRect(OX, OY + f.r * CS, N * CS, CS); else c.fillRect(OX + f.q * CS, OY, CS, N * CS); }
+        c.restore();
+        drawShreyas(c, 60, 540, 34, { mood: combo > 1 ? 'grin' : moves <= 3 ? 'shock' : 'happy' });
+        c.fillStyle = C.ink; c.font = '600 14px Rubik, sans-serif'; c.textAlign = 'left'; c.fillText(combo > 1 ? `Combo x${combo}!` : 'Match 4 or 5 for specials', 110, 545);
+        fl.draw(c);
+      }
+    };
+  }
+});
+
+/* ---------- 29. Shreyas Bowling ---------- */
+GAMES.push({
+  id: 'bowling', name: 'Shreyas Bowling', tag: 'Ten frames of bowling with real pin physics. Strikes, spares and a perfect 300.', badge: 'Sports', scoreLabel: 'Score',
+  howto: 'Slide left or right to line Shreyas up, then drag back from the ball and let go to bowl, like a slingshot. Aim and power come from your drag. 10 frames, real bowling scoring.',
+  thumb(c, w, h) {
+    c.fillStyle = '#2b2440'; c.fillRect(0, 0, w, h); c.fillStyle = '#e8c48a'; c.fillRect(w * 0.3, 0, w * 0.4, h); c.fillStyle = '#555'; c.fillRect(w * 0.26, 0, w * 0.04, h); c.fillRect(w * 0.7, 0, w * 0.04, h);
+    const px = [[0, 0], [-1, 1], [1, 1], [-2, 2], [0, 2], [2, 2]]; px.forEach(([a, b]) => { c.fillStyle = '#fff'; c.strokeStyle = C.ink; c.lineWidth = 2; ell(c, w / 2 + a * 9, 40 - b * 10, 6, 6); c.fill(); c.stroke(); c.fillStyle = C.red; c.fillRect(w / 2 + a * 9 - 4, 40 - b * 10 - 1, 8, 2); });
+    c.fillStyle = '#1d1b2e'; ell(c, w / 2, h - 30, 12, 12); c.fill(); drawShreyas(c, w / 2, h - 30, 9, { thin: true, mood: 'grin' });
+  },
+  create(env) {
+    const LX = 120, LW = 160, LR = LX + LW, BR = 13, PR = 8, START_Y = 520, HEAD = 180;
+    const PIN_POS = []; [[0], [-1, 1], [-2, 0, 2], [-3, -1, 1, 3]].forEach((row, i) => row.forEach((k) => PIN_POS.push({ x: 200 + k * 13, y: HEAD - i * 22 })));
+    let frame = 0, roll = 0, rolls = [], frames = Array.from({ length: 10 }, () => []), pins, ball, bx = 200, state = 'aim', drag = null, settleT = 0, t = 0, standing, msg = '', msgT = 0, done = false, sliding = false;
+    const fl = floaters();
+    function rackPins(keep) { pins = PIN_POS.map((p, i) => ({ x: p.x + rand(-2.2, 2.2), y: p.y + rand(-2.2, 2.2), vx: 0, vy: 0, down: false, gone: keep ? !keep[i] : false, hx: p.x, hy: p.y })); }
+    rackPins();
+    function resetBall() { ball = { x: bx, y: START_Y, vx: 0, vy: 0, spin: 0, gutter: false, rot: 0 }; state = 'aim'; }
+    resetBall();
+    function totalScore() {
+      let s = 0; const r = rolls; let i = 0;
+      for (let f = 0; f < 10 && i < r.length; f++) {
+        if (r[i] === 10) { s += 10 + (r[i + 1] || 0) + (r[i + 2] || 0); i += 1; }
+        else if (r[i] + (r[i + 1] || 0) === 10) { s += 10 + (r[i + 2] || 0); i += 2; }
+        else { s += r[i] + (r[i + 1] || 0); i += 2; }
+      }
+      return s;
+    }
+    function frameScores() {
+      const out = []; let s = 0, i = 0; const r = rolls;
+      for (let f = 0; f < 10; f++) {
+        if (i >= r.length) { out.push(null); continue; }
+        if (r[i] === 10) { if (r[i + 2] == null) { out.push(null); i += 1; continue; } s += 10 + r[i + 1] + r[i + 2]; i += 1; }
+        else if (r[i + 1] == null) { out.push(null); i += 1; continue; }
+        else if (r[i] + r[i + 1] === 10) { if (r[i + 2] == null) { out.push(null); i += 2; continue; } s += 10 + r[i + 2]; i += 2; }
+        else { s += r[i] + r[i + 1]; i += 2; }
+        out.push(s);
+      }
+      return out;
+    }
+    function finishRoll() {
+      const knocked = pins.filter((p) => !p.gone && p.down).length;
+      rolls.push(knocked); frames[frame].push(knocked); env.score(totalScore());
+      const fr = frames[frame]; let next = false, rerack = false;
+      if (frame < 9) {
+        if (fr.length === 1 && knocked === 10) { msg = 'STRIKE!'; msgT = 1.6; next = true; }
+        else if (fr.length === 2) { if (fr[0] + fr[1] === 10) { msg = 'SPARE!'; msgT = 1.4; } else if (fr[0] + fr[1] === 0) { msg = 'Gutter…'; msgT = 1.2; } next = true; }
+      } else {
+        const a = fr[0], b = fr[1];
+        if (fr.length === 1) { if (a === 10) { msg = 'STRIKE!'; msgT = 1.4; rerack = true; } }
+        else if (fr.length === 2) {
+          if (a === 10) { if (b === 10) { msg = 'STRIKE!'; msgT = 1.4; rerack = true; } }
+          else if (a + b === 10) { msg = 'SPARE!'; msgT = 1.4; rerack = true; }
+          else done = true;
+        } else done = true;
+      }
+      if (done) { setTimeout(() => env.over(totalScore()), 1500); state = 'done'; return; }
+      if (next) { frame++; rackPins(); }
+      else if (rerack) rackPins();
+      else { pins.forEach((p) => { if (p.down) p.gone = true; }); pins.forEach((p) => { if (!p.gone) { p.x = p.hx; p.y = p.hy; p.vx = p.vy = 0; } }); }
+      resetBall();
+    }
+    function step(h) {
+      if (state === 'roll') {
+        ball.vx += ball.spin * h; ball.x += ball.vx * h; ball.y += ball.vy * h; ball.rot += h * 10;
+        if (!ball.gutter && (ball.x < LX + 2 || ball.x > LR - 2)) { ball.gutter = true; ball.vx = 0; ball.x = ball.x < 200 ? LX - 10 : LR + 10; }
+      }
+      for (const p of pins) { if (p.gone) continue; p.x += p.vx * h; p.y += p.vy * h; p.vx *= 1 - 2.2 * h; p.vy *= 1 - 2.2 * h; if (Math.hypot(p.x - p.hx, p.y - p.hy) > 7 || p.x < LX || p.x > LR) p.down = true; }
+      if (state === 'roll' && !ball.gutter) for (const p of pins) {
+        if (p.gone) continue; const dx = p.x - ball.x, dy = p.y - ball.y, d = Math.hypot(dx, dy);
+        if (d < BR + PR && d > 0) { const nx = dx / d, ny = dy / d; const rel = (ball.vx - p.vx) * nx + (ball.vy - p.vy) * ny; if (rel > 0) { const j = 2 * rel / (1 + 1 / 6) * rand(0.75, 1); p.vx += nx * j; p.vy += ny * j; ball.vx -= nx * j / 6; ball.vy -= ny * j / 6; } const o = BR + PR - d; p.x += nx * o; p.y += ny * o; p.down = true; }
+      }
+      for (let i = 0; i < pins.length; i++) for (let k = i + 1; k < pins.length; k++) {
+        const a = pins[i], b = pins[k]; if (a.gone || b.gone) continue; const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+        if (d < PR * 2 && d > 0) { const nx = dx / d, ny = dy / d, rel = (a.vx - b.vx) * nx + (a.vy - b.vy) * ny; if (rel > 0) { a.vx -= nx * rel * 0.9; a.vy -= ny * rel * 0.9; b.vx += nx * rel * 0.9; b.vy += ny * rel * 0.9; } const o = (PR * 2 - d) / 2; a.x -= nx * o; a.y -= ny * o; b.x += nx * o; b.y += ny * o; if (Math.hypot(a.vx, a.vy) > 20) a.down = true; if (Math.hypot(b.vx, b.vy) > 20) b.down = true; }
+      }
+    }
+    return {
+      down(x, y) { if (state !== 'aim') return; if (Math.hypot(x - ball.x, y - ball.y) < 60) drag = { sx: x, sy: y, x, y }; else if (y > 430) { sliding = true; bx = clamp(x, LX + BR, LR - BR); ball.x = bx; } },
+      move(x, y) { if (drag) { drag.x = x; drag.y = y; } else if (sliding && state === 'aim') { bx = clamp(x, LX + BR, LR - BR); ball.x = bx; } },
+      up() {
+        sliding = false; if (!drag) return; const dx = drag.sx - drag.x, dy = drag.sy - drag.y; drag = null;
+        if (dy > -30) return; const l = Math.hypot(dx, dy), pow = Math.min(1, l / 160);
+        const sp = (380 + pow * 520) * rand(0.95, 1.05), ang = Math.atan2(dy, dx) + rand(-0.045, 0.045);
+        ball.vx = Math.cos(ang) * sp; ball.vy = Math.sin(ang) * sp;
+        ball.spin = -ball.vx * 0.15 + rand(-25, 25); state = 'roll';
+      },
+      key(code, d) { if (!d || state !== 'aim') return; if (code === 'ArrowLeft' || code === 'KeyA') { bx = clamp(bx - 8, LX + BR, LR - BR); ball.x = bx; } if (code === 'ArrowRight' || code === 'KeyD') { bx = clamp(bx + 8, LX + BR, LR - BR); ball.x = bx; } if (code === 'Space' || code === 'ArrowUp') { const a = -Math.PI / 2 + rand(-0.07, 0.07); ball.x = bx + rand(-6, 6); ball.vx = Math.cos(a) * 760; ball.vy = Math.sin(a) * 760; ball.spin = rand(-60, 60); state = 'roll'; } },
+      update(dt) {
+        t += dt; msgT -= dt; fl.step(dt); if (state === 'done') return;
+        for (let i = 0; i < 6; i++) step(dt / 6);
+        if (state === 'roll' && (ball.y < 70 || Math.hypot(ball.vx, ball.vy) < 25)) { state = 'settle'; settleT = 1.3; }
+        if (state === 'settle') { settleT -= dt; if (settleT <= 0) finishRoll(); }
+      },
+      draw(c) {
+        c.fillStyle = '#2b2440'; c.fillRect(0, 0, W, H);
+        c.fillStyle = '#e8c48a'; c.fillRect(LX, 0, LW, H); c.fillStyle = 'rgba(0,0,0,.06)'; for (let i = 0; i < 10; i++) c.fillRect(LX + i * 16, 0, 1, H);
+        c.fillStyle = '#5a5470'; c.fillRect(LX - 22, 0, 22, H); c.fillRect(LR, 0, 22, H);
+        c.fillStyle = 'rgba(226,72,59,.7)'; for (let i = 0; i < 7; i++) { c.beginPath(); c.moveTo(LX + 20 + i * 20, 330); c.lineTo(LX + 26 + i * 20, 342); c.lineTo(LX + 14 + i * 20, 342); c.closePath(); c.fill(); }
+        c.fillStyle = 'rgba(29,27,46,.25)'; c.fillRect(LX, 460, LW, 3);
+        for (const p of pins) { if (p.gone) continue; c.save(); c.translate(p.x, p.y); if (p.down) { c.rotate(Math.atan2(p.vy, p.vx) || 0.8); c.fillStyle = '#fff'; c.strokeStyle = C.ink; c.lineWidth = 2; c.beginPath(); c.ellipse(0, 0, PR * 1.6, PR * 0.8, 0, 0, TAU); c.fill(); c.stroke(); } else { c.fillStyle = '#fff'; c.strokeStyle = C.ink; c.lineWidth = 2; ell(c, 0, 0, PR, PR); c.fill(); c.stroke(); c.fillStyle = C.red; c.fillRect(-PR + 2, -1.5, PR * 2 - 4, 3); } c.restore(); }
+        if (drag) { const dx = drag.sx - drag.x, dy = drag.sy - drag.y, l = Math.hypot(dx, dy) || 1; c.strokeStyle = 'rgba(255,255,255,.8)'; c.setLineDash([6, 6]); c.lineWidth = 3; c.beginPath(); c.moveTo(ball.x, ball.y); c.lineTo(ball.x + dx / l * 220, ball.y + dy / l * 220); c.stroke(); c.setLineDash([]); c.fillStyle = C.yellow; rr(c, 330, 380, 16, 140, 8); c.fill(); c.fillStyle = C.red; const pw = Math.min(1, l / 160); rr(c, 330, 380 + 140 * (1 - pw), 16, 140 * pw, 8); c.fill(); }
+        c.save(); c.translate(ball.x, ball.y); c.rotate(ball.rot); c.fillStyle = '#1d1b2e'; ell(c, 0, 0, BR, BR); c.fill(); c.restore(); drawShreyas(c, ball.x, ball.y, BR * 0.72, { thin: true, mood: state === 'roll' ? 'shock' : 'grin', rot: ball.rot * 0.2 });
+        if (state === 'aim') { drawShreyasBody(c, ball.x + 34, START_Y + 70, 12, { arms: 'shoot', face: { mood: 'happy', look: -0.5 } }); c.fillStyle = 'rgba(255,255,255,.85)'; c.font = '700 13px Rubik'; c.textAlign = 'center'; c.fillText('Slide here to move · drag back from the ball to bowl', 200, 588); }
+        // scorecard
+        c.fillStyle = '#fff'; c.fillRect(0, 0, W, 54); c.strokeStyle = C.ink; c.lineWidth = 2; const fs = frameScores();
+        for (let f = 0; f < 10; f++) { const x = 2 + f * 39.6, w2 = f === 9 ? 38 : 39.6; c.strokeRect(x, 2, w2, 50); c.fillStyle = f === frame && state !== 'done' ? '#fff2b8' : '#fff'; c.fillRect(x + 1, 3, w2 - 2, 48);
+          const fr = frames[f]; c.fillStyle = C.ink; c.font = '800 11px Rubik'; c.textAlign = 'center';
+          const marks = fr.map((v, i) => (v === 10 && (i === 0 || f === 9 && (i === 1 && fr[0] === 10 || i === 2))) ? 'X' : (i > 0 && f < 9 && fr[0] + v === 10) || (f === 9 && i === 1 && fr[0] < 10 && fr[0] + v === 10) ? '/' : v === 0 ? '-' : String(v));
+          c.fillText(marks.join(' '), x + w2 / 2, 18); c.font = '800 14px Rubik'; if (fs[f] != null) c.fillText(String(fs[f]), x + w2 / 2, 42); }
+        c.fillStyle = '#fff'; c.font = '800 14px Rubik'; c.textAlign = 'left'; c.fillText(`Frame ${Math.min(10, frame + 1)}`, 12, 80); c.textAlign = 'right'; c.fillText(`Total ${totalScore()}`, 388, 80);
+        if (msgT > 0 && msg) bigText(c, msg, 200, 260, 52, C.yellow);
+        fl.draw(c);
+      }
+    };
+  }
+});
+
+/* ---------- 30. Shreyas Rush Hour (racer) ---------- */
+GAMES.push({
+  id: 'racer', name: 'Shreyas Rush Hour', tag: 'Shreyas got his license. Weave through traffic, grab coins and nitro, don’t crash.', badge: 'Racing', scoreLabel: 'Points',
+  howto: 'Drag left and right (or arrow keys) to steer. Grab coins for points and blue nitro cans for a speed boost that smashes through traffic. Oil slicks make you skid. One crash and it’s over.',
+  thumb(c, w, h) {
+    c.fillStyle = '#555a66'; c.fillRect(0, 0, w, h); c.fillStyle = '#7cc46a'; c.fillRect(0, 0, 30, h); c.fillRect(w - 30, 0, 30, h);
+    c.fillStyle = '#fff'; for (let i = 0; i < 6; i++) { c.fillRect(w / 3 + 8, i * 30, 4, 16); c.fillRect(w * 2 / 3 - 8, i * 30 + 10, 4, 16); }
+    c.fillStyle = C.blue; c.strokeStyle = C.ink; c.lineWidth = 2; rr(c, 60, 20, 30, 50, 6); c.fill(); c.stroke(); c.fillStyle = C.yellow; rr(c, w - 90, 40, 30, 50, 6); c.fill(); c.stroke();
+    c.fillStyle = C.red; rr(c, w / 2 - 16, h - 70, 32, 56, 8); c.fill(); c.stroke(); drawShreyas(c, w / 2, h - 45, 10, { mood: 'grin', thin: true });
+  },
+  create(env) {
+    const RL = 50, RR = 350, LANES = 4, LW = (RR - RL) / LANES;
+    let px = 200, tx = 200, speed = 260, dist = 0, coins = 0, cars = [], items = [], t = 0, spawnT = 0.6, itemT = 1.2, nitro = 0, skid = 0, keys = {}, dead = false, stripe = 0, boom = null;
+    const fl = floaters(); const CARCOL = [C.blue, C.yellow, '#8e5bd6', C.green, '#f08a2c', '#ffffff'];
+    const score = () => Math.floor(dist / 10) + coins * 25;
+    return {
+      down(x) { tx = x; }, move(x) { tx = x; }, key(code, d) { keys[code] = d; },
+      update(dt) {
+        t += dt; fl.step(dt); if (dead) { if (boom) boom.t += dt; return; }
+        if (keys.ArrowLeft || keys.KeyA) tx = px - 400; if (keys.ArrowRight || keys.KeyD) tx = px + 400;
+        tx = clamp(tx, RL + 20, RR - 20);
+        const steer = skid > 0 ? 3 : 10; px += clamp(tx - px, -420 * dt, 420 * dt) * Math.min(1, dt * steer * 2.2) / Math.min(1, dt * 2.2 * 10) * (skid > 0 ? 0.35 : 1); px = clamp(px, RL + 18, RR - 18);
+        skid = Math.max(0, skid - dt); nitro = Math.max(0, nitro - dt);
+        speed = Math.min(620, speed + dt * 6); const sp = speed * (nitro > 0 ? 1.7 : 1);
+        dist += sp * dt; stripe = (stripe + sp * dt) % 60; env.score(score());
+        spawnT -= dt; if (spawnT <= 0) { spawnT = Math.max(0.35, 1.05 - speed / 900) * rand(0.7, 1.3); const lane = Math.floor(rand(0, LANES)); if (!cars.some((c2) => c2.lane === lane && c2.y < 80)) cars.push({ lane, x: RL + LW * lane + LW / 2, y: -70, v: rand(80, 170), col: CARCOL[Math.floor(rand(0, CARCOL.length))], truck: Math.random() < 0.15, hit: false }); }
+        itemT -= dt; if (itemT <= 0) { itemT = rand(0.5, 1.2); const lane = Math.floor(rand(0, LANES)), r = Math.random(); items.push({ x: RL + LW * lane + LW / 2, y: -30, kind: r < 0.12 ? 'nitro' : r < 0.25 ? 'oil' : 'coin' }); }
+        for (const c2 of cars) { c2.y += (sp - c2.v) * dt; if (c2.hit) { c2.x += c2.hvx * dt; c2.rot = (c2.rot || 0) + dt * 8; } }
+        for (const it of items) it.y += sp * dt;
+        cars = cars.filter((c2) => c2.y < H + 100 && c2.y > -200); items = items.filter((it) => it.y < H + 40 && !it.got);
+        const PY = 500;
+        for (const c2 of cars) { const h = c2.truck ? 90 : 56; if (!c2.hit && Math.abs(c2.x - px) < 30 && Math.abs(c2.y - PY) < (h + 56) / 2 - 6) { if (nitro > 0) { c2.hit = true; c2.hvx = (c2.x < px ? -1 : 1) * 380; coins += 2; fl.add('SMASH +50', c2.x, c2.y, C.yellow); } else { dead = true; boom = { x: px, y: PY, t: 0 }; setTimeout(() => env.over(score()), 1100); } } }
+        for (const it of items) if (Math.abs(it.x - px) < 28 && Math.abs(it.y - PY) < 34) { it.got = true; if (it.kind === 'coin') { coins++; fl.add('+25', px, PY - 50, C.yellow); } else if (it.kind === 'nitro') { nitro = 3; fl.add('NITRO!', px, PY - 50, '#5ab0e8'); } else { skid = 1.2; tx = px + rand(-120, 120); fl.add('SKID!', px, PY - 50, '#fff'); } }
+      },
+      draw(c) {
+        c.fillStyle = '#6fbf5f'; c.fillRect(0, 0, W, H);
+        c.fillStyle = 'rgba(0,0,0,.08)'; for (let i = 0; i < 10; i++) { const y = ((i * 80 + stripe * 1.3) % 720) - 60; ell(c, 22, y, 14, 14); c.fill(); ell(c, 378, y + 40, 14, 14); c.fill(); }
+        c.fillStyle = '#555a66'; c.fillRect(RL, 0, RR - RL, H); c.fillStyle = '#fff'; c.fillRect(RL, 0, 4, H); c.fillRect(RR - 4, 0, 4, H);
+        c.fillStyle = 'rgba(255,255,255,.8)'; for (let l = 1; l < LANES; l++) for (let y = -60 + stripe; y < H; y += 60) c.fillRect(RL + l * LW - 2, y, 4, 30);
+        for (const it of items) {
+          if (it.kind === 'coin') { c.fillStyle = C.yellow; c.strokeStyle = C.ink; c.lineWidth = 2.5; ell(c, it.x, it.y, 11, 11); c.fill(); c.stroke(); c.fillStyle = C.ink; c.font = '800 11px Rubik'; c.textAlign = 'center'; c.fillText('S', it.x, it.y + 4); }
+          else if (it.kind === 'nitro') { c.fillStyle = '#5ab0e8'; c.strokeStyle = C.ink; c.lineWidth = 2.5; rr(c, it.x - 9, it.y - 14, 18, 28, 4); c.fill(); c.stroke(); c.fillStyle = '#fff'; c.font = '800 10px Rubik'; c.textAlign = 'center'; c.fillText('N', it.x, it.y + 4); }
+          else { c.fillStyle = 'rgba(20,20,30,.75)'; c.beginPath(); c.ellipse(it.x, it.y, 22, 12, 0, 0, TAU); c.fill(); c.fillStyle = 'rgba(140,90,220,.4)'; c.beginPath(); c.ellipse(it.x - 5, it.y - 3, 8, 4, 0, 0, TAU); c.fill(); }
+        }
+        const car = (x, y, col, w, h, rot) => { c.save(); c.translate(x, y); c.rotate(rot || 0); c.fillStyle = col; c.strokeStyle = C.ink; c.lineWidth = 2.5; rr(c, -w / 2, -h / 2, w, h, 8); c.fill(); c.stroke(); c.fillStyle = '#bfe6ff'; rr(c, -w / 2 + 5, -h / 2 + 8, w - 10, 12, 3); c.fill(); c.stroke(); c.fillStyle = 'rgba(0,0,0,.2)'; rr(c, -w / 2 + 5, h / 2 - 16, w - 10, 9, 3); c.fill(); c.fillStyle = '#111'; c.fillRect(-w / 2 - 3, -h / 2 + 8, 4, 12); c.fillRect(w / 2 - 1, -h / 2 + 8, 4, 12); c.fillRect(-w / 2 - 3, h / 2 - 20, 4, 12); c.fillRect(w / 2 - 1, h / 2 - 20, 4, 12); c.restore(); };
+        for (const c2 of cars) car(c2.x, c2.y, c2.col, c2.truck ? 40 : 34, c2.truck ? 90 : 56, c2.rot ? c2.rot + Math.PI : Math.PI);
+        if (nitro > 0) { c.fillStyle = `rgba(90,176,232,${0.4 + Math.random() * 0.3})`; c.beginPath(); c.moveTo(px - 10, 528); c.lineTo(px, 560 + Math.random() * 20); c.lineTo(px + 10, 528); c.closePath(); c.fill(); }
+        if (!dead || Math.floor(t * 10) % 2) { car(px, 500, C.red, 36, 58, skid > 0 ? Math.sin(t * 20) * 0.25 : clamp((tx - px) / 300, -0.25, 0.25)); drawShreyas(c, px, 505, 10, { mood: dead ? 'shock' : nitro > 0 ? 'cool' : 'grin', thin: true }); }
+        if (boom) { c.fillStyle = `rgba(245,194,46,${1 - boom.t})`; c.beginPath(); c.arc(boom.x, boom.y, 30 + boom.t * 80, 0, TAU); c.fill(); }
+        c.fillStyle = 'rgba(29,27,46,.8)'; rr(c, 8, 8, 384, 38, 10); c.fill();
+        c.fillStyle = '#fff'; c.font = '800 16px Rubik'; c.textAlign = 'left'; c.fillText(`${score()} pts`, 18, 33);
+        c.textAlign = 'center'; c.fillStyle = C.yellow; c.fillText(`🪙 ${coins}`, 200, 33);
+        c.textAlign = 'right'; c.fillStyle = nitro > 0 ? '#5ab0e8' : '#fff'; c.fillText(`${Math.round(speed * (nitro > 0 ? 1.7 : 1) / 4)} km/h`, 382, 33);
+        fl.draw(c);
+      }
+    };
+  }
+});
+
+/* ---------- 31. Shreyas Mini Golf ---------- */
+GAMES.push({
+  id: 'golf', name: 'Shreyas Mini Golf', tag: '9 holes with walls, sand, water and moving blocks. Fewer strokes means more points.', badge: 'Sports', scoreLabel: 'Points',
+  howto: 'Drag back from the ball and let go to putt, like a slingshot. Sand slows you down. Water costs a stroke. Each hole: hole-in-one = 120 points, then 20 fewer for every extra stroke. Max 6 strokes per hole.',
+  thumb(c, w, h) {
+    c.fillStyle = '#2f7a4f'; c.fillRect(0, 0, w, h); c.fillStyle = '#7cc46a'; rr(c, 20, 14, w - 40, h - 28, 12); c.fill(); c.strokeStyle = '#8b5a2b'; c.lineWidth = 6; c.stroke();
+    c.fillStyle = '#e8d29a'; ell(c, w * 0.62, h * 0.4, 26, 16); c.fill(); c.fillStyle = '#5ab0e8'; rr(c, w * 0.25, h * 0.55, 50, 26, 10); c.fill();
+    c.fillStyle = C.ink; ell(c, w * 0.75, h * 0.25, 7, 7); c.fill(); c.fillStyle = '#ddd'; c.fillRect(w * 0.75, h * 0.25 - 30, 2, 30); c.fillStyle = C.red; c.beginPath(); c.moveTo(w * 0.75 + 2, h * 0.25 - 30); c.lineTo(w * 0.75 + 18, h * 0.25 - 24); c.lineTo(w * 0.75 + 2, h * 0.25 - 18); c.fill();
+    c.fillStyle = '#fff'; c.strokeStyle = C.ink; c.lineWidth = 2; ell(c, w * 0.3, h * 0.8, 6, 6); c.fill(); c.stroke();
+    drawShreyas(c, w * 0.14, h * 0.75, 14, { mood: 'cool' });
+  },
+  create(env) {
+    // each hole: start, cup, walls [x,y,w,h], sand, water, movers {x,y,w,h,dx,range,speed}
+    const HOLES = [
+      { par: 2, s: [200, 520], cup: [200, 130], walls: [], sand: [], water: [], movers: [] },
+      { par: 2, s: [100, 520], cup: [300, 140], walls: [[60, 320, 200, 20]], sand: [], water: [], movers: [] },
+      { par: 3, s: [200, 530], cup: [200, 120], walls: [[60, 380, 220, 20], [120, 240, 220, 20]], sand: [[220, 430, 100, 50]], water: [], movers: [] },
+      { par: 2, s: [200, 530], cup: [200, 130], walls: [], sand: [], water: [[60, 280, 205, 60]], movers: [] },
+      { par: 3, s: [90, 530], cup: [310, 120], walls: [[170, 200, 20, 360]], sand: [[60, 150, 100, 60]], water: [], movers: [] },
+      { par: 3, s: [200, 530], cup: [200, 120], walls: [], sand: [], water: [], movers: [{ x: 140, y: 320, w: 120, h: 20, range: 90, speed: 1.6 }, { x: 140, y: 220, w: 120, h: 20, range: 90, speed: -2.1 }] },
+      { par: 3, s: [80, 530], cup: [320, 130], walls: [[60, 420, 200, 20], [140, 290, 200, 20], [60, 170, 160, 20]], sand: [], water: [[250, 470, 90, 60]], movers: [] },
+      { par: 3, s: [200, 535], cup: [200, 110], walls: [[60, 300, 110, 20], [230, 300, 110, 20]], sand: [[150, 180, 100, 40]], water: [[60, 380, 90, 60], [250, 380, 90, 60]], movers: [{ x: 160, y: 250, w: 80, h: 20, range: 110, speed: 2.4 }] },
+      { par: 4, s: [80, 540], cup: [320, 100], walls: [[60, 450, 230, 20], [110, 340, 230, 20], [60, 230, 230, 20], [110, 130, 20, 100]], sand: [[200, 160, 80, 50]], water: [[250, 480, 90, 50]], movers: [{ x: 140, y: 400, w: 60, h: 20, range: 120, speed: 1.8 }] }
+    ];
+    const FX = 60, FY = 80, FW = 280, FH = 480, BRAD = 8, CUP = 13;
+    let hole = 0, ball, strokes = 0, total = 0, card = [], drag = null, moving = false, last, t = 0, msg = '', msgT = 0, sinking = 0, done = false, transition = 0;
+    const fl = floaters();
+    function start(i) { hole = i; const H2 = HOLES[i]; ball = { x: H2.s[0], y: H2.s[1], vx: 0, vy: 0 }; last = { x: ball.x, y: ball.y }; strokes = 0; moving = false; msg = `Hole ${i + 1} · Par ${H2.par}`; msgT = 1.6; sinking = 0; }
+    start(0);
+    function movers() { return HOLES[hole].movers.map((m) => ({ x: m.x + Math.sin(t * m.speed) * m.range, y: m.y, w: m.w, h: m.h })); }
+    function rects() { return [...HOLES[hole].walls.map(([x, y, w, h]) => ({ x, y, w, h })), ...movers()]; }
+    const inR = (x, y, [rx, ry, rw, rh]) => x > rx && x < rx + rw && y > ry && y < ry + rh;
+    function holeDone() {
+      const pts = Math.max(0, 140 - strokes * 20); total += pts; env.score(total); card.push(strokes);
+      msg = strokes === 1 ? 'HOLE IN ONE!' : strokes <= HOLES[hole].par - 1 ? 'Birdie!' : strokes === HOLES[hole].par ? 'Par' : strokes >= 6 ? 'Next hole…' : 'Bogey'; msgT = 1.6; fl.add('+' + pts, 200, 300, C.yellow);
+      transition = 1.6;
+    }
+    return {
+      _dbg() { return { bx: ball.x, by: ball.y, cx: HOLES[hole].cup[0], cy: HOLES[hole].cup[1], moving, transition, done, hole, strokes, total }; },
+      down(x, y) { if (moving || transition > 0 || done) return; if (Math.hypot(x - ball.x, y - ball.y) < 70) drag = { sx: x, sy: y, x, y }; },
+      move(x, y) { if (drag) { drag.x = x; drag.y = y; } },
+      up() { if (!drag) return; const dx = drag.sx - drag.x, dy = drag.sy - drag.y; drag = null; const l = Math.hypot(dx, dy); if (l < 8) return; const pow = Math.min(1, l / 170) * 720; ball.vx = dx / l * pow; ball.vy = dy / l * pow; moving = true; strokes++; last = { x: ball.x, y: ball.y }; },
+      update(dt) {
+        t += dt; msgT -= dt; fl.step(dt);
+        if (transition > 0) { transition -= dt; if (transition <= 0) { if (hole >= HOLES.length - 1) { done = true; env.over(total); } else start(hole + 1); } return; }
+        if (!moving) return;
+        const Hh = HOLES[hole]; const SUB = 8, h = dt / SUB;
+        for (let s = 0; s < SUB; s++) {
+          ball.x += ball.vx * h; ball.y += ball.vy * h;
+          if (ball.x < FX + BRAD) { ball.x = FX + BRAD; ball.vx = Math.abs(ball.vx) * 0.8; } if (ball.x > FX + FW - BRAD) { ball.x = FX + FW - BRAD; ball.vx = -Math.abs(ball.vx) * 0.8; }
+          if (ball.y < FY + BRAD) { ball.y = FY + BRAD; ball.vy = Math.abs(ball.vy) * 0.8; } if (ball.y > FY + FH - BRAD) { ball.y = FY + FH - BRAD; ball.vy = -Math.abs(ball.vy) * 0.8; }
+          for (const r of rects()) { const cx = clamp(ball.x, r.x, r.x + r.w), cy = clamp(ball.y, r.y, r.y + r.h), dx = ball.x - cx, dy = ball.y - cy, d = Math.hypot(dx, dy); if (d < BRAD) { const nx = d ? dx / d : 0, ny = d ? dy / d : -1; ball.x = cx + nx * BRAD; ball.y = cy + ny * BRAD; const vn = ball.vx * nx + ball.vy * ny; if (vn < 0) { ball.vx -= 1.8 * vn * nx; ball.vy -= 1.8 * vn * ny; } } }
+          const inSand = Hh.sand.some((r) => inR(ball.x, ball.y, r)); const fr = inSand ? 3.2 : 0.9; ball.vx *= 1 - fr * h; ball.vy *= 1 - fr * h;
+          const dc = Math.hypot(ball.x - Hh.cup[0], ball.y - Hh.cup[1]), sp = Math.hypot(ball.vx, ball.vy);
+          if (dc < CUP - 3 && sp < 520) { moving = false; ball.x = Hh.cup[0]; ball.y = Hh.cup[1]; sinking = 0.5; holeDone(); return; }
+          if (dc < CUP + 6 && sp < 160) { ball.vx += (Hh.cup[0] - ball.x) * 8 * h; ball.vy += (Hh.cup[1] - ball.y) * 8 * h; }
+          if (Hh.water.some((r) => inR(ball.x, ball.y, r))) { moving = false; strokes++; ball.x = last.x; ball.y = last.y; ball.vx = ball.vy = 0; msg = 'Splash! +1 stroke'; msgT = 1.3; if (strokes >= 6) { strokes = 7; holeDone(); return; } break; }
+        }
+        if (moving && Math.hypot(ball.vx, ball.vy) < 6) { moving = false; ball.vx = ball.vy = 0; if (strokes >= 6) { strokes = 7; holeDone(); } }
+      },
+      draw(c) {
+        const Hh = HOLES[hole];
+        c.fillStyle = '#2f7a4f'; c.fillRect(0, 0, W, H);
+        c.fillStyle = 'rgba(255,255,255,.06)'; for (let i = 0; i < 30; i++) { ell(c, (i * 71) % W, (i * 113) % H, 18, 10); c.fill(); }
+        c.fillStyle = '#7cc46a'; c.fillRect(FX, FY, FW, FH); c.fillStyle = 'rgba(255,255,255,.06)'; for (let y = FY; y < FY + FH; y += 40) c.fillRect(FX, y, FW, 20);
+        c.strokeStyle = '#8b5a2b'; c.lineWidth = 8; c.strokeRect(FX - 4, FY - 4, FW + 8, FH + 8);
+        for (const [x, y, w, h] of Hh.sand) { c.fillStyle = '#e8d29a'; rr(c, x, y, w, h, 14); c.fill(); c.fillStyle = 'rgba(0,0,0,.06)'; for (let i = 0; i < 8; i++) c.fillRect(x + (i * 23) % w, y + (i * 13) % h, 3, 3); }
+        for (const [x, y, w, h] of Hh.water) { c.fillStyle = '#5ab0e8'; rr(c, x, y, w, h, 14); c.fill(); c.strokeStyle = 'rgba(255,255,255,.5)'; c.lineWidth = 2; for (let i = 0; i < 3; i++) { c.beginPath(); c.arc(x + 20 + i * 25 + Math.sin(t * 2 + i) * 4, y + h / 2, 7, Math.PI * 1.1, Math.PI * 1.9); c.stroke(); } }
+        for (const r of rects()) { c.fillStyle = '#8b5a2b'; c.strokeStyle = C.ink; c.lineWidth = 2.5; c.fillRect(r.x, r.y, r.w, r.h); c.strokeRect(r.x, r.y, r.w, r.h); }
+        c.fillStyle = '#1d1b2e'; ell(c, Hh.cup[0], Hh.cup[1], CUP, CUP); c.fill(); c.fillStyle = '#ddd'; c.fillRect(Hh.cup[0] - 1, Hh.cup[1] - 46, 3, 46); c.fillStyle = C.red; c.beginPath(); c.moveTo(Hh.cup[0] + 2, Hh.cup[1] - 46); c.lineTo(Hh.cup[0] + 26, Hh.cup[1] - 38); c.lineTo(Hh.cup[0] + 2, Hh.cup[1] - 30); c.closePath(); c.fill(); c.strokeStyle = C.ink; c.lineWidth = 1.5; c.stroke();
+        if (drag) { const dx = drag.sx - drag.x, dy = drag.sy - drag.y, l = Math.hypot(dx, dy) || 1, p = Math.min(1, l / 170); c.strokeStyle = p > 0.75 ? C.red : '#fff'; c.lineWidth = 3; c.setLineDash([6, 6]); c.beginPath(); c.moveTo(ball.x, ball.y); c.lineTo(ball.x + dx / l * (30 + p * 140), ball.y + dy / l * (30 + p * 140)); c.stroke(); c.setLineDash([]); }
+        if (transition <= 0 || sinking > 0) { c.fillStyle = '#fff'; c.strokeStyle = C.ink; c.lineWidth = 2; ell(c, ball.x, ball.y, transition > 0 ? BRAD * 0.5 : BRAD, transition > 0 ? BRAD * 0.5 : BRAD); c.fill(); c.stroke(); }
+        if (!moving && transition <= 0) drawShreyas(c, ball.x - 26, ball.y + 4, 13, { mood: drag ? 'cool' : 'happy', thin: true });
+        // HUD
+        c.fillStyle = 'rgba(29,27,46,.85)'; rr(c, 8, 8, 384, 56, 10); c.fill();
+        c.fillStyle = '#fff'; c.font = '800 15px Rubik'; c.textAlign = 'left'; c.fillText(`Hole ${hole + 1}/9 · Par ${Hh.par}`, 18, 30); c.fillText(`Strokes: ${strokes}`, 18, 52);
+        c.textAlign = 'right'; c.fillStyle = C.yellow; c.fillText(`${total} pts`, 382, 30);
+        c.font = '700 11px Rubik'; c.fillStyle = 'rgba(255,255,255,.8)'; c.fillText(card.length ? 'Card: ' + card.join(' ') : '', 382, 52);
+        if (msgT > 0) bigText(c, msg, 200, 330, msg.length > 14 ? 30 : 40, C.yellow);
+        fl.draw(c);
+      }
+    };
+  }
+});
+
 /* ---------- 8. Shreyas Horror (link) ---------- */
 const HORROR = {
   id: 'horror', name: 'Shreyas Horror', tag: 'Escape his house in five days. 3D. Not for the faint of heart.', badge: 'Scary', link: HORROR_URL,
@@ -2944,6 +3344,12 @@ function localNameForm(container, id, score, after) {
 /* ======================= FEEDBACK + UPDATE LOG ======================= */
 // Newest first. Add an entry here every time an update is pushed.
 const UPDATES = [
+  { id: '2026-10-14f', date: 'Oct 14, 2026', title: '4 new games', items: [
+    'NEW: Shreyas Crush. Match-3 with striped zappers and Shreyas bombs. 30 moves to score big.',
+    'NEW: Shreyas Bowling. 10 frames, real pin physics and proper strike and spare scoring.',
+    'NEW: Shreyas Rush Hour. Weave through traffic, grab coins, and use nitro to smash cars out of the way.',
+    'NEW: Shreyas Mini Golf. 9 holes with sand, water and moving blocks.'
+  ] },
   { id: '2026-10-14e', date: 'Oct 14, 2026', title: '3 new games, more content, new home page', items: [
     'NEW: Shreyas Adventure, a 6-level platformer. Stomp roosters, hit ? blocks and reach the flag.',
     'NEW: Shreyas Fishing. 16 kinds of fish, a fish journal and a tackle shop with upgrades you keep.',
@@ -3118,13 +3524,13 @@ let cur = null, inst = null, running = false, scoreNow = 0, last = 0;
 function drawThumb(cv, g) { const c = cv.getContext('2d'); const w = cv.width / 2, h = cv.height / 2; c.save(); c.scale(2, 2); g.thumb(c, w, h); c.restore(); }
 var CATS = [
   { id: 'all', name: 'All' }, { id: 'fav', name: '★ Favorites' },
-  { id: 'action', name: 'Action', ids: ['egg', 'flappy', 'run', 'whack', 'snake', 'catch', 'space', 'jump', 'breakout', 'dodge', 'hop', 'adventure', 'survivors'] },
-  { id: 'brain', name: 'Brain', ids: ['2048', 'memory', 'math', 'simon', 'sweeper', 'merge'] },
-  { id: 'sports', name: 'Sports & chill', ids: ['hoops', 'pong', 'stack', 'reaction', 'fishing'] },
+  { id: 'action', name: 'Action', ids: ['egg', 'flappy', 'run', 'whack', 'snake', 'catch', 'space', 'jump', 'breakout', 'dodge', 'hop', 'adventure', 'survivors', 'racer'] },
+  { id: 'brain', name: 'Brain', ids: ['2048', 'memory', 'math', 'simon', 'sweeper', 'merge', 'crush'] },
+  { id: 'sports', name: 'Sports & chill', ids: ['hoops', 'pong', 'stack', 'reaction', 'fishing', 'bowling', 'golf'] },
   { id: 'strategy', name: 'Strategy & idle', ids: ['clicker', 'td'] },
   { id: 'scary', name: 'Scary', ids: ['horror'] }
 ];
-var NEW_IDS = ['adventure', 'fishing', 'sweeper'];
+var NEW_IDS = ['crush', 'bowling', 'racer', 'golf'];
 var hubCat = store.get('hubCat', 'all'), hubQuery = '', favs = new Set(store.get('favs', [])), hubBuilt = false;
 function dailyGame() { const d = new Date(); const key = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); let h = key; h = ((h ^ 61) ^ (h >>> 16)) * 9; h = h ^ (h >>> 4); h = h * 0x27d4eb2d; h = h ^ (h >>> 15); return GAMES[Math.abs(h) % GAMES.length]; }
 function allCards() { return [...GAMES, HORROR]; }

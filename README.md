@@ -2,7 +2,7 @@
 
 Free browser games starring Shreyas, with player accounts and leaderboards.
 
-- `index.html`: the arcade (23 games, accounts, leaderboards, feedback, update log)
+- `index.html`: the arcade (30 games, accounts, leaderboards, feedback, update log)
 - `horror.html`: Shreyas Horror, the 3D escape game
 - `firebase-config.js`: Firebase settings for accounts and leaderboards
 - `firestore.rules`: database security rules (paste into Firebase → Firestore → Rules)
