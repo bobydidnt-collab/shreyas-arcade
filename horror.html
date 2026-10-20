@@ -163,6 +163,7 @@ button.primary:hover { background: rgba(163,39,27,.6); border-color: var(--rust-
       <div class="btns">
         <button class="primary" id="playBtn">Enter Shreyas's house</button>
         <button id="inspectBtn">Inspect Shreyas</button>
+        <button id="qualityBtn">Graphics: Medium</button>
       </div>
       <div class="keys">
         <kbd>WASD</kbd><span>move · mouse to look (click the game first)</span>
@@ -228,7 +229,7 @@ button.primary:hover { background: rgba(163,39,27,.6); border-color: var(--rust-
       if (o) for (var k in o) p[k] = o[k];
       return new THREE.MeshStandardMaterial(p);
     }
-    var skin = M(creepy ? 0x6e4127 : 0x845032, { roughness: 0.58 });
+    var skin = M(creepy ? 0x87563a : 0xa06844, { roughness: 0.58 });
     skin.name = 'Skin';
     var hairM = M(0x0f0a07, { roughness: 0.18, metalness: 0.25 }); hairM.name = 'Hair';
     var hairShine = M(0x3b2c22, { roughness: 0.12, metalness: 0.4 });
@@ -485,10 +486,21 @@ button.primary:hover { background: rgba(163,39,27,.6); border-color: var(--rust-
 'use strict';
 const $ = (id) => document.getElementById(id);
 const canvas = $('c');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+/* ---------- graphics quality (low / medium / high), remembered per device ---------- */
+const QKEY = 'shreyasHorror.quality';
+let Q = null; try { Q = localStorage.getItem(QKEY); } catch (e) {}
+if (Q !== 'low' && Q !== 'med' && Q !== 'high') Q = (/CrOS|Android|iPhone|iPad/.test(navigator.userAgent) || ('ontouchstart' in window)) ? 'low' : 'med';
+if (Q === 'low') {
+  // cheaper lighting model everywhere (same colors and textures)
+  const Lam = THREE.MeshLambertMaterial;
+  THREE.MeshStandardMaterial = function (p) { p = Object.assign({}, p || {}); delete p.roughness; delete p.metalness; delete p.envMapIntensity; delete p.roughnessMap; delete p.metalnessMap; return new Lam(p); };
+}
+const QCFG = { low: { pr: 0.6, maxPr: 0.85, shadows: false, aa: false, pool: 2 }, med: { pr: 0.85, maxPr: 1, shadows: false, aa: false, pool: 3 }, high: { pr: 1.25, maxPr: 1.5, shadows: true, aa: true, pool: 4 } }[Q];
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: QCFG.aa, powerPreference: 'high-performance' });
+let pixelRatio = Math.min(window.devicePixelRatio || 1, QCFG.pr);
+renderer.setPixelRatio(pixelRatio);
+renderer.shadowMap.enabled = QCFG.shadows;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -769,7 +781,7 @@ function bfs(sr, sc, tr, tcc) {
 }
 
 /* ============================== SCENES ============================== */
-const camera = new THREE.PerspectiveCamera(72, 1, 0.05, 80);
+const camera = new THREE.PerspectiveCamera(72, 1, 0.05, 34);
 const menuScene = new THREE.Scene();
 const menuCam = new THREE.PerspectiveCamera(30, 1, 0.05, 50);
 let mode = 'menu'; // menu | inspect | play | pause | scare | card | end
@@ -780,7 +792,7 @@ menuScene.fog = new THREE.Fog(0x07080b, 6, 14);
 const showFloor = new THREE.Mesh(new THREE.CircleGeometry(3.2, 48), new THREE.MeshStandardMaterial({ color: 0x15130f, roughness: 0.95 }));
 showFloor.rotation.x = -Math.PI / 2; showFloor.receiveShadow = true; menuScene.add(showFloor);
 menuScene.add(new THREE.HemisphereLight(0x3a4c66, 0x0a0806, 1.6));
-const keyLight = new THREE.SpotLight(0xffe2b8, 140, 12, 0.45, 0.6, 1.6); keyLight.position.set(1.2, 4.2, 2.4); keyLight.target.position.set(0, 1.2, 0); keyLight.castShadow = true; keyLight.shadow.mapSize.set(1024, 1024);
+const keyLight = new THREE.SpotLight(0xffe2b8, 140, 12, 0.45, 0.6, 1.6); keyLight.position.set(1.2, 4.2, 2.4); keyLight.target.position.set(0, 1.2, 0); keyLight.castShadow = QCFG.shadows; keyLight.shadow.mapSize.set(512, 512);
 menuScene.add(keyLight, keyLight.target);
 const rimLight = new THREE.DirectionalLight(0x4f78a6, 3.2); rimLight.position.set(-2, 2.5, -3); menuScene.add(rimLight);
 const faceFill = new THREE.PointLight(0xe6e0d8, 2.5, 4, 2); faceFill.position.set(-0.6, 1.7, 1.4); menuScene.add(faceFill);
@@ -943,7 +955,7 @@ for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
     box(0.85, 0.65, 0.6, M(0x1b1b1b, { roughness: 0.6 }), 0, 0.88, back + 0.45, g);
     const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.68, 0.5), new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: staticTex, emissiveIntensity: 1.1, roughness: 0.2 }));
     scr.position.set(0, 0.88, back + 0.751); g.add(scr);
-    tvLight = new THREE.PointLight(0x9fb8ff, 3, 7, 1.6); tvLight.position.set(0, 0.95, back + 1.2); g.add(tvLight);
+    if (Q !== 'low') { tvLight = new THREE.PointLight(0x9fb8ff, 3, 7, 1.6); tvLight.position.set(0, 0.95, back + 1.2); g.add(tvLight); }
     g.updateMatrixWorld(true); tvPos = g.localToWorld(new THREE.Vector3(0, 0.9, back + 0.8));
   } else if (t === 'Q') {
     box(0.65, 2.3, 0.45, woodDark, 0, 1.15, back + 0.3, g);
@@ -1012,10 +1024,25 @@ const bulbs = [];
   const bm = new THREE.MeshStandardMaterial({ color: 0x222018, emissive: 0xffc77a, emissiveIntensity: 1.2 });
   const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 10), bm); bulb.position.set(p.x, H - 0.65, p.z); scene.add(bulb);
   const red = i === 5;
-  const light = new THREE.PointLight(red ? 0xff3322 : 0xffb766, red ? 9 : 14, red ? 8 : 10, 1.6); light.position.copy(bulb.position); light.position.y -= 0.1; scene.add(light);
+  const light = { intensity: red ? 9 : 14, color: red ? 0xff3322 : 0xffb766, distance: red ? 8 : 10, pos: new THREE.Vector3(p.x, H - 0.75, p.z) };
   if (red) bm.emissive.set(0xff3020);
   bulbs.push({ light, bm, base: light.intensity, flick: 0, dead: i === 3 || i === 9 });
 });
+// Only a few real lights exist; each frame they jump to the bulbs closest to the player.
+// (Every real light makes every pixel more expensive, so 12 bulb lights were the main cause of lag.)
+const bulbPool = [];
+for (let i = 0; i < QCFG.pool; i++) { const L = new THREE.PointLight(0xffb766, 0, 10, 1.6); scene.add(L); bulbPool.push(L); }
+let poolT = 0;
+function updateBulbPool(dt, px, pz) {
+  poolT -= dt;
+  if (poolT <= 0 || !bulbPool.assigned) {
+    poolT = 0.25;
+    const d2 = (b) => (b.light.pos.x - px) ** 2 + (b.light.pos.z - pz) ** 2;
+    bulbPool.assigned = bulbs.slice().sort((a, b) => d2(a) - d2(b)).slice(0, bulbPool.length);
+    bulbPool.assigned.forEach((b, i) => { const L = bulbPool[i]; L.position.copy(b.light.pos); L.color.set(b.light.color); L.distance = b.light.distance; });
+  }
+  bulbPool.assigned.forEach((b, i) => { bulbPool[i].intensity = b.light.intensity; });
+}
 
 // ---------- front door ----------
 const doorG = new THREE.Group(); const dp = center(doorRC[0], doorRC[1]); doorG.position.set(dp.x, 0, doorRC[0] * S); scene.add(doorG);
@@ -1093,7 +1120,7 @@ const viewModel = new THREE.Group(); viewModel.position.set(0.3, -0.27, -0.55); 
 
 // ---------- lights carried by the player ----------
 const flash = new THREE.SpotLight(0xfff1d6, 90, 24, 0.5, 0.5, 1.3);
-flash.position.set(0.18, -0.12, 0.1); flash.castShadow = true; flash.shadow.mapSize.set(1024, 1024); flash.shadow.camera.near = 0.2; flash.shadow.camera.far = 20; flash.shadow.bias = -0.0005;
+flash.position.set(0.18, -0.12, 0.1); flash.castShadow = QCFG.shadows; flash.shadow.mapSize.set(512, 512); flash.shadow.camera.near = 0.2; flash.shadow.camera.far = 20; flash.shadow.bias = -0.0005;
 camera.add(flash); flash.target.position.set(0, -0.05, -3); camera.add(flash.target);
 const bodyGlow = new THREE.PointLight(0x9fb0d0, 0.8, 4, 2); camera.add(bodyGlow);
 
@@ -1103,7 +1130,7 @@ const phantom = buildShreyas(THREE, { creepy: true }); phantom.visible = false; 
 const scareRig = buildShreyas(THREE, { creepy: true }); scareRig.visible = false; camera.add(scareRig);
 const scareLight = new THREE.PointLight(0xff3a20, 0, 2.5, 2); scareLight.position.set(0, -0.55, -0.1); camera.add(scareLight);
 const eyeGlow = shreyas.userData.pupilMat;
-const shreyasEyeLight = new THREE.PointLight(0xff2200, 0, 2.2, 2); shreyas.userData.head.add(shreyasEyeLight); shreyasEyeLight.position.set(0, 0.19, 0.3);
+const shreyasEyeLight = Q === 'low' ? Object.assign(new THREE.Object3D(), { intensity: 0 }) : new THREE.PointLight(0xff2200, 0, 2.2, 2); shreyas.userData.head.add(shreyasEyeLight); shreyasEyeLight.position.set(0, 0.19, 0.3);
 [scareRig, phantom].forEach(m => { m.userData.pupilMat.emissive.set(0xff1a00); m.userData.pupilMat.emissiveIntensity = 3; m.userData.irisMat.emissive.set(0x550000); m.userData.irisMat.emissiveIntensity = 1; });
 scareRig.traverse(o => { if (o.isMesh) { o.castShadow = false; o.frustumCulled = false; } });
 
@@ -1502,6 +1529,7 @@ function playUpdate(dt) {
   if (pendulum) { pendulum.rotation.z = Math.sin(gameTime * Math.PI) * 0.22; clockT -= dt; if (clockT <= 0) { clockT = 1; Audio.tick(clockPos, 0.5); } }
   const flicking = flickerT > 0;
   bulbs.forEach(b => { let k = 1; if (b.dead) k = Math.random() < 0.04 ? 0.8 : 0.02; else if (flicking) k = Math.random() < 0.5 ? 0.05 : 1; else if (Math.random() < 0.008) b.flick = 0.15; if (b.flick > 0) { b.flick -= dt; k *= Math.random() * 0.4; } b.light.intensity = b.base * k; b.bm.emissiveIntensity = 1.2 * k; });
+  updateBulbPool(dt, player.pos.x, player.pos.z);
   let fl = player.light ? 90 : 0; if (flicking && Math.random() < 0.4) fl *= 0.1; if (AI.state === 'chase' && d < 6 && Math.random() < 0.15) fl *= 0.3;
   flash.intensity += (fl - flash.intensity) * Math.min(1, dt * 20);
   // items bob
@@ -1533,10 +1561,26 @@ function menuUpdate(dt, t) {
   if (nightForm) showNight.userData.head.rotation.z = Math.sin(t * 0.7) * 0.12 + 0.22;
 }
 
+const QNAME = { low: 'Low (fastest)', med: 'Medium', high: 'High' };
+$('qualityBtn').textContent = 'Graphics: ' + QNAME[Q];
+$('qualityBtn').onclick = () => {
+  const next = { low: 'med', med: 'high', high: 'low' }[Q];
+  try { localStorage.setItem(QKEY, next); } catch (e) {}
+  if (window.__SA_EMBED) window.__SA_EMBED.open('horror.html'); else location.reload();
+};
 const clock = new THREE.Clock(); let gtick = 0;
+let perfT = 0, perfN = 0;
 function frame() {
   requestAnimationFrame(frame);
-  const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+  const raw = clock.getDelta(), dt = Math.min(raw, 0.05), t = clock.elapsedTime;
+  // automatic resolution: drop it when the game runs slowly, raise it back when there's room
+  perfT += raw; perfN++;
+  if (perfT > 2) {
+    const fps = perfN / perfT; perfT = 0; perfN = 0;
+    const want = fps < 38 ? pixelRatio - 0.1 : fps > 56 ? pixelRatio + 0.05 : pixelRatio;
+    const next = clamp(Math.round(want * 100) / 100, 0.45, Math.min(window.devicePixelRatio || 1, QCFG.maxPr));
+    if (next !== pixelRatio && !document.hidden) { pixelRatio = next; renderer.setPixelRatio(pixelRatio); }
+  }
   gtick += dt; if (gtick > 0.06) { gtick = 0; drawGrain(); }
   if (mode === 'menu' || mode === 'inspect') { menuUpdate(dt, t); renderer.render(menuScene, menuCam); return; }
   if (mode === 'play') playUpdate(dt);
