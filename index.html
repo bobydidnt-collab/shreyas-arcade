@@ -7,7 +7,7 @@
 <script>
 /* Moving hosts: carry this browser's saves (best scores, clicker, favorites...) to the new site. */
 (function () {
-  var NEW_HOME = '';
+  var NEW_HOME = 'https://shreyas-arcade.vercel.app/';
   var P = 'shreyasArcade.';
   try {
     var h = location.hash;
@@ -5756,6 +5756,11 @@ function localNameForm(container, id, score, after) {
 /* ======================= FEEDBACK + UPDATE LOG ======================= */
 // Newest first. Add an entry here every time an update is pushed.
 const UPDATES = [
+  { id: '2026-10-20c', date: 'Oct 20, 2026', title: 'New home: shreyas-arcade.vercel.app', items: [
+    'Shreyas Arcade has moved to shreyas-arcade.vercel.app. Bookmark it!',
+    'The old link still works and sends you here automatically.',
+    'Your account, scores and leaderboards are the same. Progress saved on your device (like Shreyas Clicker) comes with you when you open the old link once.'
+  ] },
   { id: '2026-10-20b', date: 'Oct 20, 2026', title: 'Fairer games + better on phones', items: [
     'Thanks for the feedback! We went through every game and fixed the ones that felt impossible.',
     'Steal an Egg: you can now outrun the roosters, even carrying an egg. They also give up the chase sooner.',
