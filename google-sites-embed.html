@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shreyas Arcade</title>
+</head>
+<body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#14121d;color:#f2ede1;font:700 18px system-ui,sans-serif;text-align:center">
+<div id="sa-msg">Loading Shreyas Arcade…</div>
+<script id="sa-loader">
+(function () {
+  var MIRRORS = [
+    'https://cdn.jsdelivr.net/gh/bobydidnt-collab/shreyas-arcade@main/',
+    'https://raw.githack.com/bobydidnt-collab/shreyas-arcade/main/',
+    'https://cdn.statically.io/gh/bobydidnt-collab/shreyas-arcade/main/',
+    'https://shreyas-arcade.vercel.app/',
+    'https://bobydidnt-collab.github.io/shreyas-arcade/'
+  ];
+  var SELF = document.getElementById('sa-loader').textContent;
+  function msg(t) { var m = document.getElementById('sa-msg'); if (m) m.textContent = t; }
+  function load(path, i) {
+    i = i || 0;
+    if (i >= MIRRORS.length) { msg('Couldn’t load Shreyas Arcade. This network may be blocking it.'); return; }
+    var base = MIRRORS[i], ctl = window.AbortController ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 9000);
+    fetch(base + path, ctl ? { signal: ctl.signal, cache: 'no-cache' } : { cache: 'no-cache' }).then(function (r) {
+      if (!r.ok) throw new Error(r.status); return r.text();
+    }).then(function (html) {
+      clearTimeout(timer);
+      if (html.indexOf('<html') < 0) throw new Error('not html');
+      if (path !== 'index.html') html = html.replace(/<body>/i, '<body><button onclick="window.__SA_EMBED.open(\'index.html\')" style="position:fixed;top:10px;left:10px;z-index:99999;font:700 15px system-ui;padding:8px 14px;border-radius:10px;border:2px solid #000;background:#f5c22e;color:#1d1b2e;cursor:pointer">← Arcade</button>');
+      html = html.replace(/<head>/i, function () { return '<head><base href="' + base + '"><script id="sa-loader">' + SELF + '<\/script>'; });
+      document.open(); document.write(html); document.close();
+    }).catch(function () { clearTimeout(timer); load(path, i + 1); });
+  }
+  window.__SA_EMBED = { open: function (p) { load(p, 0); } };
+  if (document.getElementById('sa-msg')) load('index.html', 0);
+})();
+</script>
+</body>
+</html>

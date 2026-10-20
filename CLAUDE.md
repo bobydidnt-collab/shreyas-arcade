@@ -12,3 +12,8 @@ Static site on Vercel (auto-deploys from GitHub main; old GitHub Pages URL redir
 - If `firestore.rules` changes, the owner must paste it into Firebase console → Firestore → Rules → Publish.
 - Username rules live in two places that must match: `nameProblem()` / `NAME_*` lists in `index.html` and `nameAllowed()` in `firestore.rules`.
   Login emails are `<username lowercased, underscores removed>@players.shreyas-arcade.game`, so names differing only by case/underscores collide.
+- Google Sites: the owner's Google Site uses the "Embed code" from `google-sites-embed.html`. It is a tiny loader that fetches
+  `index.html` from jsDelivr (`cdn.jsdelivr.net/gh/bobydidnt-collab/shreyas-arcade@main/`), with raw.githack / statically / Vercel / GitHub Pages
+  as fallbacks, so the site works on school networks that block vercel.app and github.io. After every push, purge jsDelivr's cache:
+  `https://purge.jsdelivr.net/gh/bobydidnt-collab/shreyas-arcade@main/index.html` (also `/horror.html`, `/firebase-config.js` if changed).
+  Don't make the game depend on its own hostname; when embedded, `window.__SA_EMBED.open(path)` loads other pages (e.g. horror.html).
