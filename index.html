@@ -9,7 +9,7 @@
 <script>
 /* Moving hosts: carry this browser's saves (best scores, clicker, favorites...) to the new site. */
 (function () {
-  var NEW_HOME = 'https://shreyas-arcade.vercel.app/';
+  var NEW_HOME = 'https://sites.google.com/view/shreyasarcade';
   var P = 'shreyasArcade.';
   try {
     var h = location.hash;
@@ -19,11 +19,8 @@
       history.replaceState(null, '', location.pathname + location.search);
     }
   } catch (e) {}
-  if (NEW_HOME && /github\.io$/.test(location.hostname)) {
-    var d = {}, s = '';
-    try { for (var i = 0; i < localStorage.length; i++) { var key = localStorage.key(i); if (key.indexOf(P) === 0) d[key] = localStorage.getItem(key); } s = btoa(unescape(encodeURIComponent(JSON.stringify(d)))); } catch (e) {}
-    location.replace(NEW_HOME + (s && s.length < 60000 ? '#migrate=' + s : ''));
-  }
+  // The real home is the Google Site (works on school networks). Send visitors of the old links there.
+  if (NEW_HOME && window.top === window && /(github\.io|vercel\.app)$/.test(location.hostname)) location.replace(NEW_HOME);
 })();
 </script>
 <title>Shreyas Arcade</title>
@@ -6393,6 +6390,12 @@ function localNameForm(container, id, score, after) {
 /* ======================= FEEDBACK + UPDATE LOG ======================= */
 // Newest first. Add an entry here every time an update is pushed.
 const UPDATES = [
+  { id: '2026-10-20e', date: 'Oct 20, 2026', title: 'New home: sites.google.com/view/shreyasarcade', items: [
+    'Shreyas Arcade now lives at sites.google.com/view/shreyasarcade. Bookmark it!',
+    'It works on more networks (including a lot of school ones).',
+    'The old Vercel and GitHub links send you there automatically.',
+    'Your account, scores and leaderboards are the same everywhere. Just log in.'
+  ] },
   { id: '2026-10-20d', date: 'Oct 20, 2026', title: 'Dark mode + 5 new games', items: [
     'NEW: Dark mode is now the default. Prefer the old look? Tap ☀️ Light at the top of the home page (it remembers your choice).',
     'NEW: Shreyas Blocks. Falling-block puzzle with hold, ghost piece, combos and swipe controls.',
@@ -6400,11 +6403,6 @@ const UPDATES = [
     'NEW: Shreydle. Guess the 5-letter word in 6 tries, and keep your streak going. Shreyas can whisper a hint.',
     'NEW: Shreyas Bubble Pop. Aim, bounce and match 3 to pop. Drop whole clusters for huge points.',
     'NEW: Shreyas Quiz Show. 12 trivia questions with a timer, 50/50 and Ask Shreyas lifelines.'
-  ] },
-  { id: '2026-10-20c', date: 'Oct 20, 2026', title: 'New home: shreyas-arcade.vercel.app', items: [
-    'Shreyas Arcade has moved to shreyas-arcade.vercel.app. Bookmark it!',
-    'The old link still works and sends you here automatically.',
-    'Your account, scores and leaderboards are the same. Progress saved on your device (like Shreyas Clicker) comes with you when you open the old link once.'
   ] },
   { id: '2026-10-20b', date: 'Oct 20, 2026', title: 'Fairer games + better on phones', items: [
     'Thanks for the feedback! We went through every game and fixed the ones that felt impossible.',

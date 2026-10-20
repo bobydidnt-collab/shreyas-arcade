@@ -2,7 +2,7 @@
 
 `index.html` is the source of truth: edit it directly (all games, site UI and account code live in that one file).
 
-Static site on Vercel (auto-deploys from GitHub main; old GitHub Pages URL redirects via the NEW_HOME script in _migrate) (https://shreyas-arcade.vercel.app/) with Firebase Auth + Firestore.
+Real home: Google Site https://sites.google.com/view/shreyasarcade (owner: bobydidnt account; full page embed of google-sites-embed.html). Vercel (https://shreyas-arcade.vercel.app/, auto-deploys from GitHub main) and GitHub Pages still host the files, but top-level visits to vercel.app / github.io redirect to the Google Site (script in _migrate / top of index.html and horror.html). Firebase Auth + Firestore.
 
 - Every time an update is pushed, add an entry at the TOP of the `UPDATES` list in `index.html`
   (search for `const UPDATES`). Use a new unique `id`, the date, a short title, and plain-language bullet points
