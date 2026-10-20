@@ -197,6 +197,14 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--blue); outline-
   .bar h2 { font-size: 21px; }
   .bar { gap: 8px; }
 }
+@media (max-width: 480px) {
+  .bar { padding: 6px 10px; gap: 6px; }
+  .bar .btn { padding: 6px 10px; font-size: 15px; }
+  .bar .wide { display: none; }
+  .bar h2 { font-size: 19px; }
+  .score { font-size: 13px; }
+}
+#view, #game { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 @media (prefers-reduced-motion: reduce) { .card, .card:hover { transition: none; transform: none; } }
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -274,10 +282,10 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--blue); outline-
 
 <section id="view" hidden>
   <div class="bar">
-    <button class="btn" id="backBtn">← Games</button>
+    <button class="btn" id="backBtn" aria-label="Back to games">←<span class="wide"> Games</span></button>
     <h2 id="gameTitle">Game</h2>
     <div class="score" id="scoreBox">Score <b id="scoreNow">0</b> <span>· Best <b id="scoreBest">0</b></span></div>
-    <button class="btn" id="restartBtn">Restart</button>
+    <button class="btn" id="restartBtn" aria-label="Restart">↻<span class="wide"> Restart</span></button>
   </div>
   <div id="stage">
     <div id="canvasBox">
@@ -670,7 +678,7 @@ GAMES.push({
         let dx = 0, dy = 0;
         if (keys.ArrowLeft || keys.KeyA) dx -= 1; if (keys.ArrowRight || keys.KeyD) dx += 1; if (keys.ArrowUp || keys.KeyW) dy -= 1; if (keys.ArrowDown || keys.KeyS) dy += 1;
         if (ptr) { const vx = ptr.x - st.x, vy = ptr.y - st.y, l = Math.hypot(vx, vy); if (l > 6) { dx = vx / l; dy = vy / l; } }
-        const l = Math.hypot(dx, dy); const sp = st.egg ? 115 : 160;
+        const l = Math.hypot(dx, dy); const sp = st.egg ? 138 : 168;
         if (l) { st.x = clamp(st.x + dx / l * sp * dt, 14, W - 14); st.y = clamp(st.y + dy / l * sp * dt, 20, H - 20); }
         st.inv = Math.max(0, st.inv - dt);
         // eggs
@@ -683,12 +691,12 @@ GAMES.push({
           const vx = st.x - r.x, vy = st.y - r.y, d = Math.hypot(vx, vy);
           const facing = r.dir > 0 ? 0 : Math.PI; const ang = Math.atan2(vy, vx);
           let da = Math.abs(((ang - facing + Math.PI * 3) % TAU) - Math.PI);
-          const range = st.egg ? 150 : 125;
+          const range = st.egg ? 138 : 118;
           const seen = st.inv <= 0 && d < range && da < 0.55 && st.y < 520;
           if (seen && r.alert <= 0) fl.add('!', r.x, r.y - 30, C.red);
-          if (seen) r.alert = 2.2;
+          if (seen) r.alert = 1.5;
           if (r.alert > 0) {
-            r.alert -= dt; const cs = 150 + st.eggs * 3; r.x += vx / d * cs * dt; r.y += vy / d * cs * dt; r.dir = vx > 0 ? 1 : -1;
+            r.alert -= dt; const cs = Math.min(132, 112 + st.eggs * 1.5); r.x += vx / d * cs * dt; r.y += vy / d * cs * dt; r.dir = vx > 0 ? 1 : -1;
             if (d < 22 && st.inv <= 0) { caught(); return; }
             if (r.alert <= 0) r.home = true;
           } else {
@@ -710,7 +718,7 @@ GAMES.push({
         drawShreyas(c, home.x, home.y - 6, 44, { mood: chew > 0 ? 'grin' : st.egg ? 'happy' : 'happy', look: clamp((st.x - home.x) / 150, -1, 1) });
         // cones
         for (const r of roosters) {
-          const facing = r.dir > 0 ? 0 : Math.PI, range = st.egg ? 150 : 125;
+          const facing = r.dir > 0 ? 0 : Math.PI, range = st.egg ? 138 : 118;
           c.fillStyle = r.alert > 0 ? 'rgba(226,72,59,.32)' : 'rgba(255,240,120,.45)';
           c.beginPath(); c.moveTo(r.x, r.y); c.arc(r.x, r.y, range, facing - 0.55, facing + 0.55); c.closePath(); c.fill();
         }
@@ -841,11 +849,11 @@ GAMES.push({
       update(dt) {
         t += dt; if (dead) { vy += 1500 * dt; y += vy * dt; if (y > 600) env.over(score); return; }
         vy += 1300 * dt; y += vy * dt; groundX = (groundX + 150 * dt) % 40;
-        spawn -= dt; if (spawn <= 0) { spawn = 1.55; const gap = Math.max(140, 185 - score * 2); const gy = rand(110, 430 - gap); pipes.push({ x: W + 40, top: gy, gap, passed: false, egg: Math.random() < 0.35 }); }
+        spawn -= dt; if (spawn <= 0) { spawn = 1.55; const gap = Math.max(150, 190 - score * 2); const gy = rand(110, 430 - gap); pipes.push({ x: W + 40, top: gy, gap, passed: false, egg: Math.random() < 0.35 }); }
         const speed = 150 + Math.min(70, score * 3);
         for (const p of pipes) { p.x -= speed * dt; if (!p.passed && p.x + 30 < 110) { p.passed = true; score++; env.score(score); } if (p.egg && Math.abs(p.x + 90 - 110) < 24 && Math.abs(p.top + p.gap / 2 - y) < 28) { p.egg = false; score += 3; env.score(score); fl.add('+3', 110, y - 30, C.yellow); } }
         pipes = pipes.filter((p) => p.x > -80);
-        const r = 19;
+        const r = 15;
         if (y > 540 - r || y < r) dead = true;
         for (const p of pipes) { if (110 + r > p.x - 30 && 110 - r < p.x + 30 && (y - r < p.top || y + r > p.top + p.gap)) dead = true; }
         fl.step(dt);
@@ -898,14 +906,14 @@ GAMES.push({
       down: jump, key(code, d) { if (d && (code === 'Space' || code === 'ArrowUp' || code === 'KeyW')) jump(); },
       update(dt) {
         t += dt; if (dead) { return; }
-        speed += 7 * dt; dist += speed * dt / 10; env.score(Math.floor(dist / 10));
+        speed = Math.min(600, speed + 6 * dt); dist += speed * dt / 10; env.score(Math.floor(dist / 10));
         vy += 2000 * dt; py += vy * dt; if (py >= GY) { py = GY; vy = 0; jumps = 0; }
         phase += dt * speed / 26;
         spawn -= dt; if (spawn <= 0) {
           const r = Math.random(); const lvl = Math.min(1, dist / 4000);
           if (r < 0.5) obs.push({ type: 'books', x: W + 30, n: 1 + Math.floor(Math.random() * (2 + lvl * 2)) });
           else if (r < 0.78) obs.push({ type: 'ball', x: W + 30, y: GY - 18, vy: 0, extra: 90 });
-          else obs.push({ type: 'plane', x: W + 30, y: GY - rand(120, 150), extra: 60 });
+          else obs.push({ type: 'plane', x: W + 30, y: GY - rand(150, 172), extra: 60 });
           spawn = rand(0.85, 1.6) * (300 / speed) + 0.25;
         }
         for (const o of obs) {
@@ -1036,7 +1044,7 @@ GAMES.push({
         dir = next; const h = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
         if (h.x < 0 || h.y < 0 || h.x >= COLS || h.y >= ROWS || snake.some((s) => s.x === h.x && s.y === h.y)) { dead = true; setTimeout(() => env.over(score), 600); return; }
         snake.unshift(h);
-        if (h.x === food.x && h.y === food.y) { const v = food.gold ? 3 : 1; score += v; env.score(score); for (let i = 1; i < v; i++) snake.push({ ...snake[snake.length - 1] }); delay = Math.max(0.07, delay - 0.003); place(); }
+        if (h.x === food.x && h.y === food.y) { const v = food.gold ? 3 : 1; score += v; env.score(score); for (let i = 1; i < v; i++) snake.push({ ...snake[snake.length - 1] }); delay = Math.max(0.085, delay - 0.003); place(); }
         else snake.pop();
       },
       draw(c) {
@@ -1067,13 +1075,13 @@ GAMES.push({
     const BH = 26, cols = [C.red, C.blue, C.green, C.orange, C.yellow, '#8e5bd6'];
     let blocks = [{ x: 100, w: 200, y: 540 }], mover, camY = 0, debris = [], score = 0, combo = 0, dead = false, t = 0;
     const fl = floaters();
-    function newMover() { const top = blocks[blocks.length - 1]; const fromLeft = blocks.length % 2; mover = { x: fromLeft ? -top.w * 0.3 : W - top.w * 0.7, w: top.w, y: top.y - BH, dir: fromLeft ? 1 : -1, sp: 150 + Math.min(220, score * 9) }; }
+    function newMover() { const top = blocks[blocks.length - 1]; const fromLeft = blocks.length % 2; mover = { x: fromLeft ? -top.w * 0.3 : W - top.w * 0.7, w: top.w, y: top.y - BH, dir: fromLeft ? 1 : -1, sp: 150 + Math.min(170, score * 7) }; }
     newMover();
     function drop() {
       if (dead) return; const top = blocks[blocks.length - 1];
       let x1 = Math.max(mover.x, top.x), x2 = Math.min(mover.x + mover.w, top.x + top.w), ov = x2 - x1;
       if (ov <= 0) { dead = true; debris.push({ x: mover.x, w: mover.w, y: mover.y, vy: 0, c: cols[blocks.length % 6] }); setTimeout(() => env.over(score), 900); return; }
-      if (Math.abs(mover.x - top.x) < 6) { x1 = top.x; ov = top.w; combo++; fl.add(combo > 1 ? `PERFECT x${combo}` : 'PERFECT', 200, mover.y - camY - 20, C.yellow); if (combo >= 3) { ov = Math.min(220, ov + 10); x1 -= 5; } }
+      if (Math.abs(mover.x - top.x) < 8) { x1 = top.x; ov = top.w; combo++; fl.add(combo > 1 ? `PERFECT x${combo}` : 'PERFECT', 200, mover.y - camY - 20, C.yellow); if (combo >= 3) { ov = Math.min(220, ov + 10); x1 -= 5; } }
       else { combo = 0; const cutX = mover.x < top.x ? mover.x : x2, cutW = mover.w - ov; debris.push({ x: cutX, w: cutW, y: mover.y, vy: 0, c: cols[blocks.length % 6] }); }
       blocks.push({ x: x1, w: ov, y: mover.y }); score++; env.score(score); newMover();
     }
@@ -1223,7 +1231,7 @@ GAMES.push({
     drawShreyas(c, w / 2, h - 50, 24, { mood: 'grin' }); c.fillStyle = '#c99a55'; rr(c, w / 2 - 34, h - 22, 68, 20, 6); c.fill(); c.strokeStyle = C.ink; c.lineWidth = 2.5; c.stroke();
   },
   create(env) {
-    let px = 200, target = 200, items = [], spawn = 0.8, score = 0, lives = 3, t = 0, keys = {}, mood = 'happy', moodT = 0;
+    let px = 200, target = 200, items = [], spawn = 0.8, score = 0, lives = 5, t = 0, keys = {}, mood = 'happy', moodT = 0;
     const fl = floaters();
     return {
       down(x) { target = x; }, move(x) { target = x; }, key(code, d) { keys[code] = d; },
@@ -1231,11 +1239,11 @@ GAMES.push({
         t += dt; moodT -= dt; if (moodT <= 0) mood = 'happy';
         if (keys.ArrowLeft || keys.KeyA) target = px - 400 * dt * 2; if (keys.ArrowRight || keys.KeyD) target = px + 400 * dt * 2;
         target = clamp(target, 40, 360); px += (target - px) * Math.min(1, dt * 14);
-        spawn -= dt; const lvl = Math.min(1, t / 70);
-        if (spawn <= 0) { spawn = rand(0.45, 0.9) - lvl * 0.25; const r = Math.random(); items.push({ x: rand(30, 370), y: -20, vy: rand(130, 190) + lvl * 180, kind: r < 0.08 ? 'gold' : r < 0.28 + lvl * 0.12 ? 'rotten' : 'egg', rot: rand(-1, 1) }); }
+        spawn -= dt; const lvl = Math.min(1, t / 90);
+        if (spawn <= 0) { spawn = Math.max(0.3, rand(0.5, 0.95) - lvl * 0.22); const r = Math.random(); items.push({ x: rand(30, 370), y: -20, vy: rand(130, 185) + lvl * 140, kind: r < 0.08 ? 'gold' : r < 0.28 + lvl * 0.12 ? 'rotten' : 'egg', rot: rand(-1, 1) }); }
         for (const it of items) {
           it.y += it.vy * dt; it.rot += dt * 2;
-          if (!it.done && it.y > 515 && it.y < 545 && Math.abs(it.x - px) < 46) {
+          if (!it.done && it.y > 510 && it.y < 550 && Math.abs(it.x - px) < 52) {
             it.done = true;
             if (it.kind === 'rotten') { lives--; mood = 'sad'; moodT = 1; fl.add('YUCK', px, 470, '#9bbf3a'); }
             else { const v = it.kind === 'gold' ? 5 : 1; score += v; env.score(score); mood = 'grin'; moodT = 0.4; fl.add('+' + v, px, 470, v > 1 ? C.yellow : '#fff'); }
@@ -1254,7 +1262,7 @@ GAMES.push({
         c.fillStyle = '#c99a55'; c.strokeStyle = C.ink; c.lineWidth = 3; rr(c, px - 48, 510, 96, 34, 8); c.fill(); c.stroke();
         c.strokeStyle = '#8a6430'; c.lineWidth = 2; for (let i = 1; i < 6; i++) { c.beginPath(); c.moveTo(px - 48 + i * 16, 512); c.lineTo(px - 48 + i * 16, 542); c.stroke(); }
         bigText(c, String(score), 200, 60, 50, '#fff');
-        for (let i = 0; i < 3; i++) { c.globalAlpha = i < lives ? 1 : 0.2; drawEgg(c, W - 24 - i * 26, 30, 10); } c.globalAlpha = 1;
+        for (let i = 0; i < 5; i++) { c.globalAlpha = i < lives ? 1 : 0.2; drawEgg(c, W - 24 - i * 22, 30, 9); } c.globalAlpha = 1;
         fl.draw(c);
       }
     };
@@ -1300,7 +1308,7 @@ GAMES.push({
         }
         for (const p of power) { p.y += 120 * dt; if (Math.hypot(p.x - x, p.y - y) < 30) { p.got = true; triple = 7; fl.add('TRIPLE SHOT', x, y - 50, C.yellow); } }
         power = power.filter((p) => !p.got && p.y < H + 20);
-        if (inv <= 0) for (const rk of rocks) if (!rk.dead && Math.hypot(rk.x - x, rk.y - y) < rk.r + 16) { rk.dead = true; lives--; inv = 1.5; booms.push({ x, y, t: 0, r: 30 }); if (lives <= 0) { setTimeout(() => env.over(score), 500); } }
+        if (inv <= 0) for (const rk of rocks) if (!rk.dead && Math.hypot(rk.x - x, rk.y - y) < rk.r + 12) { rk.dead = true; lives--; inv = 1.5; booms.push({ x, y, t: 0, r: 30 }); if (lives <= 0) { setTimeout(() => env.over(score), 500); } }
         shots = shots.filter((s) => !s.dead); rocks = rocks.filter((r) => !r.dead && r.y < H + 50);
         for (const b of booms) b.t += dt; while (booms.length && booms[0].t > 0.5) booms.shift();
         fl.step(dt);
@@ -1398,7 +1406,7 @@ GAMES.push({
   },
   create(env) {
     let px = 200, py = 450, vx = 0, vy = -700, camY = 0, plats = [], best = 0, keys = {}, hold = 0, t = 0, dead = false, face = 1;
-    function gen(y) { const lvl = Math.min(1, -y / 12000); const r = Math.random(); return { x: rand(10, W - 80), y, w: 70, type: r < 0.12 + lvl * 0.15 ? 'move' : r < 0.22 + lvl * 0.2 ? 'paper' : 'ruler', spring: Math.random() < 0.07, dir: Math.random() < 0.5 ? -1 : 1, broke: false }; }
+    function gen(y) { const lvl = Math.min(1, -y / 12000); const r = Math.random(); if (Math.random() < 0.15 + lvl * 0.2) plats.push({ x: rand(10, W - 80), y: y - rand(28, 42), w: 70, type: 'paper', spring: false, dir: 1, broke: false }); return { x: rand(10, W - 80), y, w: 70, type: r < 0.12 + lvl * 0.15 ? 'move' : 'ruler', spring: Math.random() < 0.07, dir: Math.random() < 0.5 ? -1 : 1, broke: false }; }
     plats.push({ x: 160, y: 540, w: 80, type: 'ruler', spring: false });
     for (let y = 480; y > -400; y -= rand(60, 90)) plats.push(gen(y));
     return {
@@ -1482,7 +1490,7 @@ GAMES.push({
             if (ball.x < R) { ball.x = R; ball.vx = Math.abs(ball.vx); } if (ball.x > W - R) { ball.x = W - R; ball.vx = -Math.abs(ball.vx); }
             if (ball.y < 60 + R) { ball.y = 60 + R; ball.vy = Math.abs(ball.vy); }
             if (ball.vy > 0 && ball.y + R > PY && ball.y + R < PY + 16 && Math.abs(ball.x - px) < PW / 2 + R) {
-              const off = (ball.x - px) / (PW / 2); const sp = Math.hypot(ball.vx, ball.vy) * 1.01;
+              const off = (ball.x - px) / (PW / 2); const sp = Math.min(560, Math.hypot(ball.vx, ball.vy) * 1.01);
               const a = clamp(off, -1, 1) * 1.05; ball.vx = Math.sin(a) * sp; ball.vy = -Math.cos(a) * sp; ball.y = PY - R;
             }
             for (const b of bricks) {
@@ -1641,12 +1649,12 @@ GAMES.push({
         t += dt; env.score(Math.floor(t)); shield = Math.max(0, shield - dt);
         if (keys.ArrowLeft || keys.KeyA) tx = px - 1500 * dt; if (keys.ArrowRight || keys.KeyD) tx = px + 1500 * dt;
         tx = clamp(tx, 22, W - 22); px += (tx - px) * Math.min(1, dt * 14);
-        const lvl = Math.min(1, t / 60);
+        const lvl = Math.min(1, t / 90);
         spawn -= dt;
         if (spawn <= 0) {
-          spawn = rand(0.28, 0.6) - lvl * 0.18; const r = Math.random();
+          spawn = Math.max(0.2, rand(0.32, 0.62) - lvl * 0.14); const r = Math.random();
           const kind = r < 0.05 ? 'egg' : r < 0.55 ? 'pencil' : r < 0.8 ? 'ball' : 'ruler';
-          items.push({ kind, x: kind === 'ruler' ? rand(50, 350) : rand(20, 380), y: -40, vy: (kind === 'ruler' ? rand(150, 220) : rand(200, 300)) + lvl * 220, vx: kind === 'ball' ? rand(-80, 80) : 0, rot: 0 });
+          items.push({ kind, x: kind === 'ruler' ? rand(50, 350) : rand(20, 380), y: -40, vy: (kind === 'ruler' ? rand(150, 210) : rand(190, 280)) + lvl * 170, vx: kind === 'ball' ? rand(-80, 80) : 0, rot: 0 });
         }
         for (const it of items) {
           it.age = (it.age || 0) + dt; it.x += it.vx * dt; it.y += it.vy * dt; it.rot += dt * 6;
@@ -1769,7 +1777,7 @@ GAMES.push({
         const target = Math.max(camRow, pr - 4); camRow += (target - camRow) * Math.min(1, dt * 3) + dt * Math.min(0.45, 0.12 + best / 300);
         if (dead) return;
         const row = makeRow(pr);
-        if (row.type === 'road') { for (const th of row.things) if (px > th.x - 10 && px < th.x + th.w + 10) { die(); return; } }
+        if (row.type === 'road') { for (const th of row.things) if (px > th.x - 5 && px < th.x + th.w + 5) { die(); return; } }
         if (row.type === 'water' && hopT === 0) {
           const log = row.things.find((th) => px > th.x + 4 && px < th.x + th.w - 4);
           if (!log) { die(); return; } px += row.dir * row.sp * dt; if (px < 0 || px > W) { die(); return; }
@@ -1920,7 +1928,7 @@ GAMES.push({
         P.x = clamp(P.x + dx * P.sp * dt, 16, WORLD - 16); P.y = clamp(P.y + dy * P.sp * dt, 16, WORLD - 16); if (dx) P.face = Math.sign(dx);
         cam.x += (P.x - 200 - cam.x) * Math.min(1, dt * 8); cam.y += (P.y - 300 - cam.y) * Math.min(1, dt * 8);
         // spawning
-        spawnT -= dt; const rate = 0.55 + t / 40; if (spawnT <= 0 && en.length < 220) { spawnT = 1 / rate; spawn(false); if (t > 90 && Math.random() < 0.25) spawn(false); }
+        spawnT -= dt; const rate = Math.min(6, 0.5 + t / 45); if (spawnT <= 0 && en.length < 220) { spawnT = 1 / rate; spawn(false); if (t > 90 && Math.random() < 0.25) spawn(false); }
         bossT -= dt; if (bossT <= 0) { bossT = 120; spawn(true); dmgTx.push({ x: P.x, y: P.y - 60, v: 'BOSS!', t: 0 }); }
         // enemies
         for (const e of en) {
@@ -2271,7 +2279,7 @@ GAMES.push({
 /* ---------- 25. Shreyas Adventure (platformer) ---------- */
 GAMES.push({
   id: 'adventure', name: 'Shreyas Adventure', tag: 'Run, jump and stomp through 6 levels to get to class. Collect eggs, find secret blocks, reach the flag.', badge: 'Platformer', scoreLabel: 'Points',
-  howto: 'Arrow keys / A-D to move, Space / W / Up to jump. On a phone, use the buttons at the bottom. Stomp roosters from above, hit ? blocks from below, and reach the flag. 3 lives.',
+  howto: 'Arrow keys / A-D to move, Space / W / Up to jump. On a phone, use the buttons at the bottom. Stomp roosters from above, hit ? blocks from below, and reach the flag. 5 lives, and you get one back each level.',
   thumb(c, w, h) {
     c.fillStyle = '#9fd8ff'; c.fillRect(0, 0, w, h);
     c.fillStyle = '#7cc46a'; c.fillRect(0, h - 26, w, 26); c.fillStyle = '#8b5a2b'; c.fillRect(0, h - 14, w, 14);
@@ -2368,7 +2376,7 @@ GAMES.push({
        '###############  #####  ######  ######## ##### ############### ###################### ######### ',
        '###############  #####  ######  ######## ##### ############### ###################### ######### ']
     ];
-    let safe = null, flag = null, level = 0, map, player, enemies, items, camX, score = 0, lives = 3, keys = {}, ptrs = {}, t = 0, coinsLvl = 0, levelT = 0, msg = '', msgT = 0, dead = false, won = false, pops = [];
+    let safe = null, flag = null, level = 0, map, player, enemies, items, camX, score = 0, lives = 5, keys = {}, ptrs = {}, t = 0, coinsLvl = 0, levelT = 0, msg = '', msgT = 0, dead = false, won = false, pops = [];
     const fl = floaters();
     function load(i) {
       const raw = LEVELS[i]; map = raw.map((r) => r.split('')); enemies = []; items = []; coinsLvl = 0; levelT = 0; pops = [];
@@ -2439,7 +2447,7 @@ GAMES.push({
         if (p.y > map.length * T + 60) { player.inv = 0; hurt('pit'); }
         if (flag && Math.abs(p.x - flag.x) < 22 && p.y > flag.top && p.y - p.h < flag.bottom) {
           const bonus = 100 + Math.max(0, Math.round(120 - levelT)) * 2; score += bonus; env.score(score); fl.add(`LEVEL CLEAR +${bonus}`, 200, 220, C.yellow);
-          level++; if (level >= LEVELS.length) { won = true; score += lives * 100; env.score(score); msg = 'You made it to class!'; msgT = 99; setTimeout(() => env.over(score), 1600); return; }
+          level++; if (lives < 5) { lives++; fl.add('+1 LIFE', 200, 260, '#7cff7a'); } if (level >= LEVELS.length) { won = true; score += lives * 100; env.score(score); msg = 'You made it to class!'; msgT = 99; setTimeout(() => env.over(score), 1600); return; }
           load(level);
         }
         for (const it of items) if (!it.got && Math.abs(it.x - p.x) < 18 && Math.abs(it.y - (p.y - 20)) < 26) { it.got = true; score += 5; coinsLvl++; env.score(score); }
@@ -2483,7 +2491,7 @@ GAMES.push({
         c.fillStyle = 'rgba(29,27,46,.75)'; rr(c, 8, 8, 384, 34, 10); c.fill();
         c.fillStyle = '#fff'; c.font = '800 15px Rubik, sans-serif'; c.textAlign = 'left'; c.fillText(`Level ${level + 1}/${LEVELS.length}`, 18, 31);
         c.textAlign = 'center'; c.fillStyle = C.yellow; c.fillText(`${score} pts`, 200, 31);
-        for (let i = 0; i < 3; i++) { c.globalAlpha = i < lives ? 1 : 0.25; drawShreyas(c, 330 + i * 22, 25, 8, { thin: true }); } c.globalAlpha = 1;
+        for (let i = 0; i < 5; i++) { c.globalAlpha = i < lives ? 1 : 0.25; drawShreyas(c, 290 + i * 22, 25, 8, { thin: true }); } c.globalAlpha = 1;
         // touch buttons
         c.globalAlpha = 0.55; for (const k in BTN) { const b = BTN[k]; c.fillStyle = held(k) ? C.yellow : '#fff'; c.strokeStyle = C.ink; c.lineWidth = 3; rr(c, b.x, b.y, b.w, b.h, 14); c.fill(); c.stroke(); c.fillStyle = C.ink; c.font = '800 22px Rubik'; c.textAlign = 'center'; c.fillText(k === 'left' ? '◀' : k === 'right' ? '▶' : 'JUMP', b.x + b.w / 2, b.y + b.h / 2 + 8); } c.globalAlpha = 1;
         if (msgT > 0) bigText(c, msg, 200, 200, 38, '#fff');
@@ -2533,7 +2541,7 @@ GAMES.push({
       const w = pool.map((f) => f.rar * (f.v > 50 ? 1 + up.bait * 0.35 : 1)); let r = Math.random() * w.reduce((a, b) => a + b, 0);
       for (let i = 0; i < pool.length; i++) { r -= w[i]; if (r <= 0) return pool[i]; } return pool[0];
     }
-    function startReel() { const f = pickFish(); fish = f; reel = { prog: 0.25, pos: 0.5, vel: 0, target: 0.5, tgtT: 0, zone: 0.22 + up.line * 0.04, fishX: bob.x, fishY: bob.y }; state = 'reel'; }
+    function startReel() { const f = pickFish(); fish = f; reel = { prog: 0.32, pos: 0.5, vel: 0, target: 0.5, tgtT: 0, zone: 0.22 + up.line * 0.04, fishX: bob.x, fishY: bob.y }; state = 'reel'; }
     function land(ok) {
       if (ok) {
         const f = fish, size = Math.round(f.size * rand(0.8, 1.35)), val = Math.round(f.v * (size / f.size));
@@ -2565,7 +2573,7 @@ GAMES.push({
         if (state !== 'over') { day -= dt; if (day <= 0) { day = 0; state = 'over'; setTimeout(() => env.over(coins), 400); return; } }
         if (state === 'charge') { power += powerDir * dt * 1.1; if (power > 1) { power = 1; powerDir = -1; } if (power < 0) { power = 0; powerDir = 1; } }
         if (state === 'fly') { bob.fly -= dt; if (bob.fly <= 0) { state = 'wait'; waitT = rand(1.5, 5) * (1 - up.bait * 0.15); } }
-        if (state === 'wait') { waitT -= dt; if (waitT <= 0) { state = 'bite'; biteT = 0.75 + up.rod * 0.05; } }
+        if (state === 'wait') { waitT -= dt; if (waitT <= 0) { state = 'bite'; biteT = 0.95 + up.rod * 0.05; } }
         if (state === 'bite') { biteT -= dt; if (biteT <= 0) { msg = 'Too slow!'; msgT = 1.2; state = 'ready'; bob = null; } }
         if (state === 'reel') {
           const R = reel, s = fish.str;
@@ -2573,7 +2581,7 @@ GAMES.push({
           R.fishPos = (R.fishPos ?? 0.5) + (R.target - (R.fishPos ?? 0.5)) * Math.min(1, dt * (1.4 + s));
           R.vel += (holding ? 2.6 : -2.3) * dt; R.vel *= 0.9; R.pos = clamp(R.pos + R.vel * dt * 2.2, 0, 1); if (R.pos === 0 || R.pos === 1) R.vel = 0;
           const inZone = Math.abs(R.fishPos - R.pos) < R.zone / 2;
-          R.prog = clamp(R.prog + (inZone ? (0.32 + up.rod * 0.07) / Math.sqrt(s) : -0.22 * Math.sqrt(s) / (1 + up.line * 0.15)) * dt, 0, 1);
+          R.prog = clamp(R.prog + (inZone ? (0.32 + up.rod * 0.07) / Math.sqrt(s) : -0.15 * Math.sqrt(s) / (1 + up.line * 0.15)) * dt, 0, 1);
           if (R.prog >= 1) land(true); else if (R.prog <= 0) land(false);
         }
         fl.step(dt);
@@ -3003,9 +3011,9 @@ GAMES.push({
         tx = clamp(tx, RL + 20, RR - 20);
         const steer = skid > 0 ? 3 : 10; px += clamp(tx - px, -420 * dt, 420 * dt) * Math.min(1, dt * steer * 2.2) / Math.min(1, dt * 2.2 * 10) * (skid > 0 ? 0.35 : 1); px = clamp(px, RL + 18, RR - 18);
         skid = Math.max(0, skid - dt); nitro = Math.max(0, nitro - dt);
-        speed = Math.min(620, speed + dt * 6); const sp = speed * (nitro > 0 ? 1.7 : 1);
+        speed = Math.min(540, speed + dt * 5); const sp = speed * (nitro > 0 ? 1.7 : 1);
         dist += sp * dt; stripe = (stripe + sp * dt) % 60; env.score(score());
-        spawnT -= dt; if (spawnT <= 0) { spawnT = Math.max(0.35, 1.05 - speed / 900) * rand(0.7, 1.3); const lane = Math.floor(rand(0, LANES)); if (!cars.some((c2) => c2.lane === lane && c2.y < 80)) cars.push({ lane, x: RL + LW * lane + LW / 2, y: -70, v: rand(80, 170), col: CARCOL[Math.floor(rand(0, CARCOL.length))], truck: Math.random() < 0.15, hit: false }); }
+        spawnT -= dt; if (spawnT <= 0) { spawnT = Math.max(0.35, 1.05 - speed / 900) * rand(0.7, 1.3); const lane = Math.floor(rand(0, LANES)); const busy = new Set(cars.filter((c2) => c2.y < 190 && !c2.hit).map((c2) => c2.lane)); busy.add(lane); if (busy.size < LANES && !cars.some((c2) => c2.lane === lane && c2.y < 80)) cars.push({ lane, x: RL + LW * lane + LW / 2, y: -70, v: rand(80, 170), col: CARCOL[Math.floor(rand(0, CARCOL.length))], truck: Math.random() < 0.15, hit: false }); }
         itemT -= dt; if (itemT <= 0) { itemT = rand(0.5, 1.2); const lane = Math.floor(rand(0, LANES)), r = Math.random(); items.push({ x: RL + LW * lane + LW / 2, y: -30, kind: r < 0.12 ? 'nitro' : r < 0.25 ? 'oil' : 'coin' }); }
         for (const c2 of cars) { c2.y += (sp - c2.v) * dt; if (c2.hit) { c2.x += c2.hvx * dt; c2.rot = (c2.rot || 0) + dt * 8; } }
         for (const it of items) it.y += sp * dt;
@@ -3752,12 +3760,12 @@ GAMES.push({
     function setState(s, d) { st.state = s; st.stT = d; }
     function step(dt) {
       st.stT -= dt;
-      if (st.state === 'sleep' && st.stT <= 0) { setState('stir', clamp(1.05 - st.score * 0.025, 0.45, 1.05)); st.bubble = { text: pick(['hm?', 'huh…?', '*sniff sniff*', 'who’s there…?']), t: 0 }; FUN.tone(320, 0.2, 'sine', 0.05, 420); }
+      if (st.state === 'sleep' && st.stT <= 0) { setState('stir', clamp(1.15 - st.score * 0.02, 0.7, 1.15)); st.bubble = { text: pick(['hm?', 'huh…?', '*sniff sniff*', 'who’s there…?']), t: 0 }; FUN.tone(320, 0.2, 'sine', 0.05, 420); }
       else if (st.state === 'stir' && st.stT <= 0) {
         if (Math.random() < 0.3) { setState('sleep', rand(1.5, 3.5) * speedK()); st.bubble = { text: '…zzz. Fake out.', t: 0 }; }
         else { setState('awake', rand(1.3, 2.3)); FUN.tone(880, 0.12, 'square', 0.05); }
       } else if (st.state === 'awake') {
-        if (st.hand > 0.12) { setState('caught', 99); st.bubble = { text: 'HEY!! THOSE ARE MY EGGS!', t: 0 }; FUN.say('Hey! Those are my eggs!', 1.6); FUN.tone(200, 0.5, 'sawtooth', 0.1, 90); st.over = 1.8; return; }
+        if (st.hand > 0.15) { setState('caught', 99); st.bubble = { text: 'HEY!! THOSE ARE MY EGGS!', t: 0 }; FUN.say('Hey! Those are my eggs!', 1.6); FUN.tone(200, 0.5, 'sawtooth', 0.1, 90); st.over = 1.8; return; }
         if (st.stT <= 0) { setState('sleep', rand(1.4, 4.2) * speedK()); st.bubble = null; }
       }
     }
@@ -3771,7 +3779,7 @@ GAMES.push({
         step(dt); if (st.state === 'caught') return;
         if (st.carry) { st.hand -= dt * 2.6; if (st.hand <= 0) { st.hand = 0; st.carry = false; st.score++; env.score(st.score); fl.add('+1 egg', 360, 420, C.yellow); FUN.tone(660, 0.08, 'triangle', 0.07); FUN.tone(990, 0.1, 'triangle', 0.07, null, 0.08); } }
         else if (st.hold) { st.hand = Math.min(1, st.hand + dt * 1.9); if (st.hand >= 1) { st.grab += dt; if (st.grab >= 0.35) { st.grab = 0; st.carry = true; FUN.tone(1200, 0.04, 'square', 0.04); } } }
-        else { st.hand = Math.max(0, st.hand - dt * 3.2); st.grab = 0; }
+        else { st.hand = Math.max(0, st.hand - dt * 4.5); st.grab = 0; }
         if (st.state === 'sleep') { st.mumble -= dt; if (st.mumble <= 0) { st.mumble = rand(3, 6); st.bubble = { text: pick(MUMBLE), t: 0 }; } if (Math.random() < dt * 1.6) st.z.push({ x: 160, y: 300, t: 0 }); }
         st.z.forEach((z) => { z.t += dt; z.y -= 30 * dt; z.x += Math.sin(z.t * 3) * 0.6; }); st.z = st.z.filter((z) => z.t < 2.2);
         if (st.bubble) { st.bubble.t += dt; if (st.bubble.t > 2.2) st.bubble = null; }
@@ -4266,7 +4274,7 @@ GAMES.push({
   },
   create(env) {
     const L = 14, R = 386, T = 14, Bt = 586, GW = 70, PR = 14, MR = 27, WIN = 7;
-    const st = { me: { x: 200, y: 500, px: 200, py: 500, vx: 0, vy: 0 }, ai: { x: 200, y: 90, px: 200, py: 90, vx: 0, vy: 0 }, puck: { x: 200, y: 300, vx: 0, vy: 0 }, ptr: null, keys: {}, sm: 0, sa: 0, pause: 1.2, say: null, sayT: 0, end: null, endT: 0, t: 0, aiSpd: 430, flash: null };
+    const st = { me: { x: 200, y: 500, px: 200, py: 500, vx: 0, vy: 0 }, ai: { x: 200, y: 90, px: 200, py: 90, vx: 0, vy: 0 }, puck: { x: 200, y: 300, vx: 0, vy: 0 }, ptr: null, keys: {}, sm: 0, sa: 0, pause: 1.2, say: null, sayT: 0, end: null, endT: 0, t: 0, aiSpd: 380, flash: null };
     const fl = floaters();
     function talk(t) { st.say = t; st.sayT = 2; FUN.say(t, 1.7, 1.15); }
     function reset(toward) { const p = st.puck; p.x = 200; p.y = toward === 'me' ? 380 : 220; p.vx = 0; p.vy = 0; st.pause = 1; }
@@ -4385,14 +4393,14 @@ GAMES.push({
       st.shot = { x0: BALL.x, y0: BALL.y, tx, ty, t: 0, dur: by === 'me' ? 0.5 : 0.62, by, miss, result: null };
       FUN.tone(180, 0.1, 'square', 0.08, 120);
       if (by === 'me') {
-        const read = Math.random() < 0.45, sideX = read ? tx : pick([GL + 50, 200, GR - 50]);
-        st.keeper.tx = clamp(sideX, GL + 30, GR - 30); st.keeper.side = Math.sign(st.keeper.tx - 200); st.keeper.up = ty < 180 ? 1 : 0;
+        const read = Math.random() < 0.4, sideX = read ? tx : pick([GL + 60, 200, GR - 60]);
+        st.keeper.tx = clamp(sideX, GL + 60, GR - 60); st.keeper.side = Math.sign(st.keeper.tx - 200); st.keeper.up = ty < 180 ? 1 : 0;
       }
       phase('fly');
     }
     function resolve() {
       const s = st.shot; let saved = false;
-      const kp = s.by === 'me' ? st.keeper : st.you, reach = s.by === 'me' ? 50 : 56;
+      const kp = s.by === 'me' ? st.keeper : st.you, reach = s.by === 'me' ? 44 : 58;
       const handY = kp.up ? GT + 50 : GB - 60;
       if (!s.miss) saved = Math.abs(kp.x - s.tx) < reach && (Math.abs(handY - s.ty) < 90 || Math.abs(kp.x - s.tx) < 26);
       const goal = !s.miss && !saved;
@@ -4521,7 +4529,7 @@ GAMES.push({
     }
     function score(who, res, lane) {
       const pts = res === 'perfect' ? 100 : res === 'good' ? 50 : 0;
-      if (who === 'me') { if (pts) { st.combo++; st.mine += pts + Math.min(50, st.combo * 2); st.roundMine += pts; } else st.combo = 0; env.score(st.mine); }
+      if (who === 'me') { if (pts) { st.combo++; st.mine += pts + Math.min(20, st.combo); st.roundMine += pts; } else st.combo = 0; env.score(st.mine); }
       else { st.his += pts; st.roundHis += pts; }
       st.judge = { text: res === 'perfect' ? 'PERFECT!' : res === 'good' ? 'Good' : 'Miss', t: 0.5, col: res === 'perfect' ? C.yellow : res === 'good' ? '#7cff7a' : '#ff6b5e' };
       if (pts) { st.pose[who] = (st.pose[who] + 1) % 4; st.poseT[who] = 0.3; FUN.tone(NOTES[lane] * (res === 'perfect' ? 1 : 0.5), 0.14, 'square', 0.05); st.flashLane[lane] = 0.15; }
@@ -4532,7 +4540,7 @@ GAMES.push({
       st.flashLane[l] = 0.1;
       let best = null, bd = 1;
       for (const n of st.notes) { if (n.done || n.lane !== l) continue; const d = Math.abs(n.t - st.song); if (d < bd) { bd = d; best = n; } }
-      if (best && bd < 0.16) { best.done = true; const res = bd < 0.075 ? 'perfect' : 'good'; best.res = res; score('me', res, l); }
+      if (best && bd < 0.18) { best.done = true; const res = bd < 0.09 ? 'perfect' : 'good'; best.res = res; score('me', res, l); }
     }
     function endTurn() {
       if (st.who === 'him') { startTurn('me'); return; }
@@ -4559,8 +4567,8 @@ GAMES.push({
           st.beat = Math.max(0, st.beat - dt);
           for (const n of st.notes) {
             if (n.done) continue;
-            if (st.who === 'him' && st.song >= n.t + (n.hisRoll < 0.6 ? 0 : n.hisRoll < 0.85 ? 0.09 : 0.3)) { n.done = true; const r = n.hisRoll < 0.6 ? 'perfect' : n.hisRoll < 0.85 ? 'good' : 'miss'; n.res = r; score('him', r, n.lane); }
-            if (st.who === 'me' && st.song > n.t + 0.18) { n.done = true; n.res = 'miss'; score('me', 'miss', n.lane); }
+            if (st.who === 'him' && st.song >= n.t + (n.hisRoll < 0.5 ? 0 : n.hisRoll < 0.82 ? 0.09 : 0.3)) { n.done = true; const r = n.hisRoll < 0.5 ? 'perfect' : n.hisRoll < 0.82 ? 'good' : 'miss'; n.res = r; score('him', r, n.lane); }
+            if (st.who === 'me' && st.song > n.t + 0.2) { n.done = true; n.res = 'miss'; score('me', 'miss', n.lane); }
           }
           if (st.song >= st.chart.end) endTurn();
         }
@@ -5728,6 +5736,18 @@ function localNameForm(container, id, score, after) {
 /* ======================= FEEDBACK + UPDATE LOG ======================= */
 // Newest first. Add an entry here every time an update is pushed.
 const UPDATES = [
+  { id: '2026-10-20b', date: 'Oct 20, 2026', title: 'Fairer games + better on phones', items: [
+    'Thanks for the feedback! We went through every game and fixed the ones that felt impossible.',
+    'Steal an Egg: you can now outrun the roosters, even carrying an egg. They also give up the chase sooner.',
+    'Shreyas Run: paper planes no longer hit you while you’re running on the ground. Just don’t jump into them. Top speed is capped.',
+    'Shreyas Jump: torn paper platforms are now extras, so there’s always a solid way up.',
+    'Rush Hour: traffic always leaves at least one lane open.',
+    'Shreyas Adventure: 5 lives instead of 3, and you get a life back every level.',
+    'Don’t Wake Shreyas: you get more warning before he opens his eyes.',
+    'Egg Catch: 5 lives and a gentler speed-up. Dodge, Flappy, Breakout, Space, Stack, Hop, Snake, Fishing and Survivors were also made fairer.',
+    'Dance Battle and Penalty Shootout: timing is more forgiving on touch screens and Shreyas is a bit less perfect.',
+    'Phones: smaller top bar so the game name fits, and no more accidental text selection while playing.'
+  ] },
   { id: '2026-10-20a', date: 'Oct 20, 2026', title: 'Boss fight + vs Shreyas games', items: [
     'NEW: ⚔️ vs Shreyas tab for games where you play against him.',
     'Shreyas: Final Boss. Giant Shreyas with 3 phases: egg barrages, homework rain, laser glasses, gel rings, hair-spike spirals and a body slam. Dodge and shoot!',
@@ -6030,7 +6050,7 @@ function startInstance() {
 function begin() { overlay(null); running = true; last = performance.now(); canvas.focus && canvas.focus(); }
 function openGame(g) {
   noteRecent(g.id);
-  cur = g; $('hub').hidden = true; $('view').hidden = false; $('gameTitle').textContent = g.name;
+  cur = g; $('hub').hidden = true; $('view').hidden = false; $('gameTitle').textContent = g.name; $('restartBtn').hidden = g.id === 'clicker' || !!g.online;
   $('scoreBest').textContent = fmt(bests[g.id] || 0);
   startInstance();
   if (g.noOverlay) begin();
