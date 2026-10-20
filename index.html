@@ -4062,6 +4062,863 @@ GAMES.push({
   }
 });
 
+/* ======================= VS SHREYAS + BOSS + MORE FUNNY ======================= */
+// "You": a kid in a blue cap, used as the player in versus games
+function drawYou(c, x, y, s, o) {
+  o = o || {}; const k = s / 50;
+  c.save(); c.translate(x, y); if (o.rot) c.rotate(o.rot); c.scale(k, k); c.lineWidth = 3.5; c.strokeStyle = C.ink; c.lineJoin = 'round'; c.lineCap = 'round';
+  c.fillStyle = '#f1c27d'; ell(c, -44, 8, 8, 12); c.fill(); c.stroke(); ell(c, 44, 8, 8, 12); c.fill(); c.stroke();
+  c.beginPath(); c.arc(0, 4, 44, 0, TAU); c.fill(); c.stroke();
+  c.fillStyle = o.col || C.blue; c.beginPath(); c.moveTo(-45, -2); c.bezierCurveTo(-46, -54, 46, -54, 45, -2); c.closePath(); c.fill(); c.stroke();
+  c.beginPath(); c.moveTo(10, -6); c.quadraticCurveTo(52, -10, 62, 2); c.quadraticCurveTo(40, 4, 10, 2); c.closePath(); c.fill(); c.stroke();
+  c.fillStyle = '#fff'; c.beginPath(); c.arc(-4, -30, 7, 0, TAU); c.fill();
+  const m = o.mood || 'happy';
+  [-16, 16].forEach((ex) => { if (m === 'laugh') { c.beginPath(); c.arc(ex, 12, 6, Math.PI * 1.1, Math.PI * 1.9); c.stroke(); return; } c.fillStyle = C.ink; ell(c, ex, 12, 4.5, m === 'shock' ? 7 : 5.5); c.fill(); });
+  if (m === 'shock') { c.fillStyle = '#4a1414'; ell(c, 0, 32, 7, 9); c.fill(); c.stroke(); }
+  else if (m === 'sad') { c.beginPath(); c.arc(0, 42, 10, Math.PI * 1.15, Math.PI * 1.85); c.stroke(); }
+  else { c.beginPath(); c.arc(0, 22, 12, Math.PI * 0.2, Math.PI * 0.8); c.stroke(); }
+  c.restore();
+}
+function drawYouBody(c, x, y, s, o) {
+  o = o || {}; const k = s / 50; c.save(); c.translate(x, y); c.scale(k, k); c.lineJoin = 'round'; c.lineCap = 'round';
+  const ph = o.run || 0, legA = Math.sin(ph) * 0.6, armA = -Math.sin(ph) * 0.7;
+  c.strokeStyle = C.ink; c.lineWidth = 4;
+  const leg = (a, dx) => { c.save(); c.translate(dx, -95); c.rotate(a); c.fillStyle = '#3b3b48'; rr(c, -11, 0, 22, 88, 8); c.fill(); c.stroke(); c.fillStyle = '#fff'; rr(c, -13, 80, 32, 15, 6); c.fill(); c.stroke(); c.restore(); };
+  leg(-legA, -12); leg(legA, 12);
+  const arm = (a, dx) => { c.save(); c.translate(dx, -178); c.rotate(a); c.fillStyle = C.blue; rr(c, -10, 0, 20, 44, 8); c.fill(); c.stroke(); c.fillStyle = '#f1c27d'; rr(c, -8, 38, 16, 38, 7); c.fill(); c.stroke(); ell(c, 0, 80, 10, 10); c.fill(); c.stroke(); c.restore(); };
+  const aL = o.arms === 'up' ? Math.PI - 0.3 : o.arms === 'shoot' ? Math.PI - 0.6 : armA;
+  const aR = o.arms === 'up' ? -Math.PI + 0.3 : o.arms === 'shoot' ? -Math.PI + 0.9 : -armA;
+  arm(aL, -36); arm(aR, 36);
+  c.fillStyle = C.blue; rr(c, -38, -185, 76, 96, 16); c.fill(); c.stroke();
+  c.fillStyle = 'rgba(255,255,255,.25)'; rr(c, -18, -140, 36, 22, 8); c.fill();
+  c.restore();
+  drawYou(c, x, y - 228 * k, s, o.face);
+}
+const stopKeys = (st, code, down) => { st.keys[code] = down; };
+
+/* ---------- 41. Shreyas: Final Boss ---------- */
+GAMES.push({
+  id: 'boss', name: 'Shreyas: Final Boss', tag: 'Giant Shreyas wants revenge. Dodge eggs, homework and laser glasses through 3 phases and take him down.', badge: 'Boss', scoreLabel: 'Points',
+  howto: 'Drag to move (or arrow keys / WASD). You shoot pencils automatically. Dodge everything. 3 phases, 5 hearts. Good luck.',
+  thumb(c, w, h) {
+    const g = c.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#2a0b12'); g.addColorStop(1, '#6b1420'); c.fillStyle = g; c.fillRect(0, 0, w, h);
+    drawShreyas(c, w / 2, h * 0.42, h * 0.3, { night: true });
+    c.fillStyle = 'rgba(255,60,40,.6)'; c.fillRect(w / 2 - h * 0.13 - 6, h * 0.45, 12, h); c.fillRect(w / 2 + h * 0.13 - 6, h * 0.45, 12, h);
+    for (let i = 0; i < 7; i++) drawEgg(c, w * (0.1 + i * 0.13), h * (0.75 + (i % 2) * 0.08), h * 0.04);
+    drawYou(c, w * 0.5, h * 0.9, h * 0.07);
+  },
+  create(env) {
+    const MAX = 2400;
+    const st = { t: 0, px: 200, py: 520, ptr: null, keys: {}, hp: 5, inv: 0, shots: [], bul: [], beams: [], sched: [], pick: [], fireT: 0, score: 0, shake: 0, flash: 0, end: null, endT: 0, hits: 0 };
+    const B = { x: 200, y: 130, hp: MAX, phase: 1, atkT: 2.2, inv: 0, say: null, sayT: 0, dive: null, last: '', hurt: 0 };
+    const fl = floaters();
+    const LINES = { 1: ['You think you can beat ME?', 'I have GLASSES. You have nothing.', 'Eat egg!'], 2: ['Okay, now I’m mad.', 'LASER GLASSES, ACTIVATE!', 'Do your homework!!'], 3: ['THIS ISN’T EVEN MY FINAL FORM!', 'NOBODY TOUCHES THE HAIR!', 'I’ll tell my mom!'] };
+    function talk(t) { B.say = t; B.sayT = 2.4; FUN.say(t, B.phase === 3 ? 0.6 : 1.5, 1.1); }
+    const later = (d, fn) => st.sched.push({ t: d, fn });
+    const aim = (x, y) => Math.atan2(st.py - y, st.px - x);
+    const shoot = (x, y, a, sp, r, kind) => st.bul.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r, kind, rot: 0 });
+    const ATK = {
+      eggs() { const n = B.phase === 1 ? 5 : 7, sp = 0.18; for (let w = 0; w < (B.phase === 3 ? 3 : 2); w++) later(w * 0.45, () => { const a0 = aim(B.x, B.y + 50); for (let i = 0; i < n; i++) shoot(B.x, B.y + 50, a0 + (i - (n - 1) / 2) * sp, 190 + B.phase * 30, 11, 'egg'); FUN.tone(300, 0.08, 'square', 0.04); }); },
+      papers() { for (let i = 0; i < 9 + B.phase * 3; i++) later(i * 0.12, () => st.bul.push({ x: rand(20, 380), y: -20, vx: rand(-30, 30), vy: rand(170, 240) + B.phase * 20, r: 13, kind: 'paper', rot: rand(0, 6), sway: rand(0, 6) })); talk(pick(['HOMEWORK RAIN!', 'Pop quiz!'])); },
+      laser() {
+        const n = B.phase === 2 ? 1 : 3; talk(pick(['LASER GLASSES!', 'Pew pew!']));
+        for (let i = 0; i < n; i++) later(i * 0.35, () => { const x = clamp(st.px + (i === 0 ? 0 : (i === 1 ? -90 : 90)), 20, 380); st.beams.push({ x, t: 0, warn: 0.85, dur: 0.55, w: 34 }); });
+      },
+      ring() { const reps = B.phase === 3 ? 3 : 2; for (let r = 0; r < reps; r++) later(r * 0.5, () => { const n = 16, off = r * 0.2; for (let i = 0; i < n; i++) shoot(B.x, B.y, off + i * TAU / n, 150 + B.phase * 15, 9, 'gel'); FUN.tone(500, 0.1, 'sine', 0.05, 200); }); },
+      spiral() { talk('NOBODY TOUCHES THE HAIR!'); for (let i = 0; i < 26; i++) later(i * 0.07, () => { const a = i * 0.45; shoot(B.x, B.y - 30, a, 180, 8, 'spike'); shoot(B.x, B.y - 30, a + Math.PI, 180, 8, 'spike'); }); },
+      dive() { talk('BONK!'); B.dive = { t: 0, x: st.px }; }
+    };
+    const PLAN = { 1: ['eggs', 'papers', 'eggs'], 2: ['laser', 'eggs', 'ring', 'papers', 'laser'], 3: ['spiral', 'laser', 'dive', 'ring', 'eggs', 'papers'] };
+    function hurtPlayer() {
+      if (st.inv > 0 || st.end) return; st.hp--; st.inv = 1.2; st.shake = 10; FUN.tone(160, 0.25, 'sawtooth', 0.08, 80);
+      fl.add('-1 ❤', st.px, st.py - 30, '#ff8a8a');
+      if (st.hp <= 0) { st.end = 'lose'; st.endT = 2; talk('Ehehehe! Too easy!'); }
+    }
+    function phaseUp(p) {
+      B.phase = p; B.inv = 1.8; st.bul = []; st.beams = []; st.sched = []; st.flash = 1; B.atkT = 2.2;
+      talk(p === 2 ? 'Okay. Now I’m MAD.' : 'THIS ISN’T EVEN MY FINAL FORM!');
+      st.pick.push({ x: rand(80, 320), y: 160, vy: 60 });
+      FUN.tone(110, 0.6, 'sawtooth', 0.08, 55);
+    }
+    talk('So. You came to fight me?');
+    return {
+      down(x, y) { st.ptr = { x, y }; FUN.audio(); },
+      move(x, y) { if (st.ptr) st.ptr = { x, y }; },
+      up() { st.ptr = null; },
+      key(code, down) { stopKeys(st, code, down); },
+      update(dt) {
+        st.t += dt; fl.step(dt); st.shake = Math.max(0, st.shake - dt * 30); st.flash = Math.max(0, st.flash - dt * 1.5);
+        st.inv = Math.max(0, st.inv - dt); B.inv = Math.max(0, B.inv - dt); B.hurt = Math.max(0, B.hurt - dt); B.sayT -= dt; if (B.sayT <= 0) B.say = null;
+        if (st.end) { st.endT -= dt; if (st.end === 'win') { B.y += 40 * dt; } if (st.endT <= 0 && !st.done) { st.done = true; env.over(st.score); } }
+        // player movement
+        const k = st.keys, sp = 300;
+        if (st.ptr) { const tx = st.ptr.x, ty = st.ptr.y - 46; st.px += clamp(tx - st.px, -900 * dt, 900 * dt); st.py += clamp(ty - st.py, -900 * dt, 900 * dt); }
+        st.px += ((k.ArrowRight || k.KeyD ? 1 : 0) - (k.ArrowLeft || k.KeyA ? 1 : 0)) * sp * dt;
+        st.py += ((k.ArrowDown || k.KeyS ? 1 : 0) - (k.ArrowUp || k.KeyW ? 1 : 0)) * sp * dt;
+        st.px = clamp(st.px, 14, 386); st.py = clamp(st.py, 290, 585);
+        // shooting
+        if (!st.end) { st.fireT -= dt; if (st.fireT <= 0) { st.fireT = 0.12; st.shots.push({ x: st.px - 6, y: st.py - 20 }, { x: st.px + 6, y: st.py - 20 }); } }
+        st.shots.forEach((s) => { s.y -= 720 * dt; });
+        st.shots = st.shots.filter((s) => {
+          if (s.y < -20) return false;
+          if (!st.end && Math.hypot(s.x - B.x, s.y - B.y) < 74) {
+            if (B.inv <= 0) { B.hp -= 10; B.hurt = 0.08; st.score += 10; st.hits++; env.score(st.score); if (st.hits % 6 === 0) FUN.tone(900, 0.03, 'square', 0.02); }
+            return false;
+          }
+          return true;
+        });
+        if (!st.end) {
+          if (B.phase === 1 && B.hp <= MAX * 2 / 3) phaseUp(2);
+          else if (B.phase === 2 && B.hp <= MAX / 3) phaseUp(3);
+          else if (B.hp <= 0) {
+            B.hp = 0; st.end = 'win'; st.endT = 3; st.bul = []; st.beams = []; st.sched = [];
+            const bonus = 3000 + st.hp * 400 + Math.max(0, Math.round(180 - st.t)) * 10; st.score += bonus; env.score(st.score);
+            fl.add(`+${bonus} VICTORY!`, 200, 300, C.yellow); talk('NOOOO! MY GLASSES! I’ll be back…'); FUN.tone(880, 0.2, 'square', 0.06); FUN.tone(1100, 0.3, 'square', 0.06, null, 0.2);
+          }
+        }
+        // boss movement + attacks
+        if (!st.end) {
+          const spd = 0.55 + B.phase * 0.2;
+          if (B.dive) {
+            const d = B.dive; d.t += dt;
+            if (d.t < 0.6) { B.x += (d.x - B.x) * dt * 6; B.y = 130 + Math.sin(d.t * 60) * 3; }
+            else if (d.t < 1.0) B.y = 130 + (d.t - 0.6) / 0.4 * 300;
+            else if (d.t < 1.7) B.y = 430 - (d.t - 1.0) / 0.7 * 300;
+            else B.dive = null;
+            if (d.t > 0.6 && d.t < 1.4 && Math.hypot(st.px - B.x, st.py - B.y) < 62) hurtPlayer();
+          } else { B.x += ((200 + Math.sin(st.t * spd) * 120) - B.x) * Math.min(1, dt * 3); B.y = 130 + Math.sin(st.t * 1.4) * 14; }
+          B.atkT -= dt;
+          if (B.atkT <= 0 && !B.dive && B.inv <= 0) {
+            const list = PLAN[B.phase]; let a = pick(list); if (a === B.last) a = pick(list); B.last = a; ATK[a]();
+            B.atkT = [0, 2.2, 1.8, 1.45][B.phase] + (a === 'spiral' ? 1 : 0);
+            if (Math.random() < 0.25 && !B.say) talk(pick(LINES[B.phase]));
+          }
+        }
+        st.sched.forEach((e) => { e.t -= dt; }); const due = st.sched.filter((e) => e.t <= 0); st.sched = st.sched.filter((e) => e.t > 0); due.forEach((e) => e.fn());
+        // bullets
+        for (const b of st.bul) { b.x += b.vx * dt + (b.kind === 'paper' ? Math.sin(st.t * 3 + b.sway) * 40 * dt : 0); b.y += b.vy * dt; b.rot += dt * 4; if (Math.hypot(b.x - st.px, b.y - st.py) < b.r + 7) { b.dead = true; hurtPlayer(); } }
+        st.bul = st.bul.filter((b) => !b.dead && b.x > -40 && b.x < 440 && b.y > -60 && b.y < 650);
+        for (const be of st.beams) { be.t += dt; if (be.t > be.warn && be.t < be.warn + be.dur && Math.abs(st.px - be.x) < be.w / 2 + 6 && st.py > B.y) hurtPlayer(); if (Math.abs(be.t - be.warn) < dt) { FUN.tone(1400, 0.4, 'sawtooth', 0.04, 300); st.shake = 5; } }
+        st.beams = st.beams.filter((be) => be.t < be.warn + be.dur);
+        for (const p of st.pick) { p.y += p.vy * dt; if (Math.hypot(p.x - st.px, p.y - st.py) < 26) { p.got = true; st.hp = Math.min(5, st.hp + 1); fl.add('+1 ❤', p.x, p.y, '#ff8fb0'); FUN.tone(990, 0.15, 'triangle', 0.06); } }
+        st.pick = st.pick.filter((p) => !p.got && p.y < 620);
+      },
+      draw(c) {
+        c.save(); if (st.shake > 0) c.translate(rand(-st.shake, st.shake), rand(-st.shake, st.shake));
+        const bgs = [null, ['#ffe9c2', '#ffc98a'], ['#ffb27a', '#e2573b'], ['#2a0b12', '#6b1420']][B.phase];
+        sky(c, bgs[0], bgs[1]);
+        if (B.phase === 3) { c.fillStyle = 'rgba(255,60,40,.12)'; for (let i = 0; i < 6; i++) c.fillRect((i * 97 + st.t * 40) % 420 - 20, (i * 131) % 600, 80, 3); }
+        else { c.fillStyle = 'rgba(255,255,255,.18)'; for (let i = 0; i < 8; i++) { c.beginPath(); c.arc((i * 71 + st.t * 10) % 440 - 20, 80 + (i * 97) % 500, 22, 0, TAU); c.fill(); } }
+        // beams
+        for (const be of st.beams) {
+          if (be.t < be.warn) { c.strokeStyle = `rgba(255,40,40,${0.3 + 0.5 * Math.abs(Math.sin(be.t * 20))})`; c.lineWidth = 2; c.setLineDash([8, 6]); c.beginPath(); c.moveTo(be.x, B.y); c.lineTo(be.x, H); c.stroke(); c.setLineDash([]); }
+          else { c.fillStyle = 'rgba(255,50,40,.85)'; c.fillRect(be.x - be.w / 2, B.y, be.w, H); c.fillStyle = 'rgba(255,240,200,.9)'; c.fillRect(be.x - be.w / 6, B.y, be.w / 3, H); }
+        }
+        // boss
+        const bs = 70, hurt = B.hurt > 0;
+        c.save(); if (B.inv > 0 && Math.sin(st.t * 40) > 0) c.globalAlpha = 0.5;
+        if (st.end === 'win') { c.translate(B.x, B.y); c.rotate(st.t * 3); c.scale(Math.max(0.1, st.endT / 3), Math.max(0.1, st.endT / 3)); c.translate(-B.x, -B.y); }
+        [-1, 1].forEach((sd) => { const hx = B.x + sd * (110 + Math.sin(st.t * 3 + sd) * 8), hy = B.y + 40 + Math.cos(st.t * 2.5 + sd) * 10; c.fillStyle = C.skin; c.strokeStyle = C.ink; c.lineWidth = 3; ell(c, hx, hy, 26, 22); c.fill(); c.stroke(); for (let f = -1; f <= 1; f++) { ell(c, hx + f * 12, hy - 20, 7, 11); c.fill(); c.stroke(); } });
+        drawShreyas(c, B.x, B.y, bs, { mood: B.phase === 1 ? 'grin' : 'shock', night: B.phase === 3, rot: B.dive ? Math.sin(st.t * 30) * 0.1 : Math.sin(st.t * 1.2) * 0.06 });
+        if (hurt) { c.fillStyle = 'rgba(255,255,255,.45)'; c.beginPath(); c.arc(B.x, B.y, bs * 1.05, 0, TAU); c.fill(); }
+        c.restore();
+        // bullets
+        for (const b of st.bul) {
+          if (b.kind === 'egg') drawEgg(c, b.x, b.y, b.r);
+          else if (b.kind === 'paper') { c.save(); c.translate(b.x, b.y); c.rotate(b.rot); c.fillStyle = '#fff'; c.fillRect(-10, -13, 20, 26); c.strokeStyle = C.ink; c.lineWidth = 2; c.strokeRect(-10, -13, 20, 26); c.fillStyle = C.red; c.font = funFont(10); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('F', 0, 0); c.restore(); }
+          else if (b.kind === 'gel') { c.fillStyle = '#59c7ff'; c.strokeStyle = C.ink; c.lineWidth = 2; c.beginPath(); c.arc(b.x, b.y, b.r, 0, TAU); c.fill(); c.stroke(); c.fillStyle = '#fff'; c.beginPath(); c.arc(b.x - 3, b.y - 3, 3, 0, TAU); c.fill(); }
+          else { c.save(); c.translate(b.x, b.y); c.rotate(Math.atan2(b.vy, b.vx)); c.fillStyle = C.hair; c.beginPath(); c.moveTo(12, 0); c.lineTo(-8, -6); c.lineTo(-8, 6); c.closePath(); c.fill(); c.strokeStyle = '#ff5a3c'; c.lineWidth = 1.5; c.stroke(); c.restore(); }
+        }
+        for (const p of st.pick) { c.font = '26px system-ui, "Apple Color Emoji", "Noto Color Emoji"'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('❤️', p.x, p.y); }
+        // shots
+        c.fillStyle = C.yellow; c.strokeStyle = C.ink; c.lineWidth = 1.5;
+        for (const s of st.shots) { c.fillRect(s.x - 2.5, s.y - 10, 5, 18); c.strokeRect(s.x - 2.5, s.y - 10, 5, 18); c.fillStyle = '#f2c79a'; c.beginPath(); c.moveTo(s.x - 2.5, s.y - 10); c.lineTo(s.x, s.y - 16); c.lineTo(s.x + 2.5, s.y - 10); c.fill(); c.fillStyle = C.yellow; }
+        // player
+        if (!(st.inv > 0 && Math.sin(st.t * 30) > 0) && !(st.end === 'lose')) drawYou(c, st.px, st.py, 16, { mood: st.inv > 0 ? 'shock' : 'happy' });
+        if (st.end === 'lose') drawYou(c, st.px, st.py, 16, { mood: 'sad', rot: 1.4 });
+        if (B.say) speechBubble(c, B.x, B.y + 78, B.say, { below: true, size: 14, maxW: 230, fill: B.phase === 3 ? '#ffe1dc' : '#fff' });
+        fl.draw(c);
+        c.restore();
+        if (st.flash > 0) { c.fillStyle = `rgba(255,255,255,${st.flash})`; c.fillRect(0, 0, W, H); }
+        // HUD
+        c.fillStyle = 'rgba(0,0,0,.35)'; rr(c, 60, 10, 280, 18, 9); c.fill();
+        c.fillStyle = B.phase === 3 ? '#ff3b2f' : B.phase === 2 ? C.orange : C.green; rr(c, 60, 10, 280 * Math.max(0, B.hp) / MAX, 18, 9); c.fill();
+        c.strokeStyle = C.ink; c.lineWidth = 2; rr(c, 60, 10, 280, 18, 9); c.stroke(); [1 / 3, 2 / 3].forEach((f) => c.fillRect(60 + 280 * f - 1, 10, 2, 18));
+        c.fillStyle = '#fff'; c.font = funFont(11); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(`SHREYAS · PHASE ${B.phase}`, 200, 19);
+        c.font = '18px system-ui, "Apple Color Emoji", "Noto Color Emoji"'; c.textAlign = 'left'; for (let i = 0; i < 5; i++) { c.globalAlpha = i < st.hp ? 1 : 0.2; c.fillText('❤️', 10 + i * 22, 584); } c.globalAlpha = 1;
+        if (st.end === 'win') bigText(c, 'YOU WIN!', 200, 300, 54, C.yellow);
+        if (st.end === 'lose') bigText(c, 'DEFEATED', 200, 300, 50, '#ff6b5e');
+      },
+      _dbg: { st, B }
+    };
+  }
+});
+
+/* ---------- 42. Air Hockey vs Shreyas ---------- */
+GAMES.push({
+  id: 'hockey', name: 'Air Hockey vs Shreyas', tag: 'Smash the puck past Shreyas. He’s fast, he trash talks, and he hates losing. First to 7.', badge: 'Versus', scoreLabel: 'Points',
+  howto: 'Drag your blue mallet to hit the puck into Shreyas’s goal at the top. First to 7 wins.',
+  thumb(c, w, h) {
+    c.fillStyle = '#e8f6ff'; c.fillRect(0, 0, w, h); c.strokeStyle = '#e2483b'; c.lineWidth = 3; c.beginPath(); c.moveTo(0, h / 2); c.lineTo(w, h / 2); c.stroke(); c.strokeStyle = '#9cc7e8'; c.beginPath(); c.arc(w / 2, h / 2, h * 0.18, 0, TAU); c.stroke();
+    c.fillStyle = C.red; c.beginPath(); c.arc(w * 0.35, h * 0.25, h * 0.12, 0, TAU); c.fill(); c.lineWidth = 3; c.strokeStyle = C.ink; c.stroke(); drawShreyas(c, w * 0.35, h * 0.25, h * 0.08, { mood: 'grin' });
+    c.fillStyle = C.blue; c.beginPath(); c.arc(w * 0.62, h * 0.78, h * 0.12, 0, TAU); c.fill(); c.stroke();
+    c.fillStyle = '#111'; c.beginPath(); c.arc(w * 0.52, h * 0.52, h * 0.06, 0, TAU); c.fill();
+  },
+  create(env) {
+    const L = 14, R = 386, T = 14, Bt = 586, GW = 70, PR = 14, MR = 27, WIN = 7;
+    const st = { me: { x: 200, y: 500, px: 200, py: 500, vx: 0, vy: 0 }, ai: { x: 200, y: 90, px: 200, py: 90, vx: 0, vy: 0 }, puck: { x: 200, y: 300, vx: 0, vy: 0 }, ptr: null, keys: {}, sm: 0, sa: 0, pause: 1.2, say: null, sayT: 0, end: null, endT: 0, t: 0, aiSpd: 430, flash: null };
+    const fl = floaters();
+    function talk(t) { st.say = t; st.sayT = 2; FUN.say(t, 1.7, 1.15); }
+    function reset(toward) { const p = st.puck; p.x = 200; p.y = toward === 'me' ? 380 : 220; p.vx = 0; p.vy = 0; st.pause = 1; }
+    function goal(who) {
+      if (who === 'me') { st.sm++; fl.add('GOAL!', 200, 200, C.yellow); talk(pick(['WHAT?! That was lag!', 'My glasses were foggy!', 'Lucky shot!', 'Okay, okay. Respect.'])); FUN.tone(660, 0.12, 'square', 0.07); FUN.tone(990, 0.18, 'square', 0.07, null, 0.12); st.aiSpd += 25; reset('ai'); }
+      else { st.sa++; fl.add('Shreyas scores', 200, 400, '#ff8a8a'); talk(pick(['Ehehehe! Too easy!', 'Did you even see it?', 'Shreyas: 1, You: sad.', 'Get good!'])); FUN.tone(300, 0.25, 'sawtooth', 0.06, 150); reset('me'); }
+      env.score(st.sm * 100); st.flash = { who, t: 0.6 };
+      if (st.sm >= WIN || st.sa >= WIN) { st.end = st.sm >= WIN ? 'win' : 'lose'; st.endT = 2.4; if (st.end === 'win') talk('NOOOO! Best of 101?'); else talk('Shreyas wins! As always.'); }
+    }
+    function collideMallet(m, steps) {
+      const p = st.puck, dx = p.x - m.x, dy = p.y - m.y, d = Math.hypot(dx, dy);
+      if (d < PR + MR && d > 0) {
+        const nx = dx / d, ny = dy / d; p.x = m.x + nx * (PR + MR); p.y = m.y + ny * (PR + MR);
+        const rvx = p.vx - m.vx, rvy = p.vy - m.vy, dot = rvx * nx + rvy * ny;
+        if (dot < 0) { p.vx -= 1.9 * dot * nx; p.vy -= 1.9 * dot * ny; FUN.tone(700 + rand(-80, 80), 0.04, 'square', 0.05); }
+      }
+    }
+    return {
+      down(x, y) { st.ptr = { x, y }; FUN.audio(); },
+      move(x, y) { if (st.ptr) st.ptr = { x, y }; },
+      up() { st.ptr = null; },
+      key(code, down) { stopKeys(st, code, down); },
+      update(dt) {
+        st.t += dt; fl.step(dt); st.sayT -= dt; if (st.sayT <= 0) st.say = null; if (st.flash) { st.flash.t -= dt; if (st.flash.t <= 0) st.flash = null; }
+        if (st.end) { st.endT -= dt; if (st.endT <= 0 && !st.done) { st.done = true; env.over(st.sm * 100 + (st.end === 'win' ? 500 : 0)); } return; }
+        const me = st.me, ai = st.ai, p = st.puck;
+        // my mallet target
+        let tx = me.x, ty = me.y;
+        if (st.ptr) { tx = st.ptr.x; ty = st.ptr.y; }
+        const k = st.keys; tx += ((k.ArrowRight || k.KeyD ? 1 : 0) - (k.ArrowLeft || k.KeyA ? 1 : 0)) * 420 * dt; ty += ((k.ArrowDown || k.KeyS ? 1 : 0) - (k.ArrowUp || k.KeyW ? 1 : 0)) * 420 * dt;
+        tx = clamp(tx, L + MR, R - MR); ty = clamp(ty, 300 + MR, Bt - MR);
+        // AI target
+        let ax, ay;
+        if (p.y < 300 && p.vy < 260) { ax = p.x + (p.x - 200) * 0.08; ay = p.y - 22; }
+        else { ax = 200 + (p.x - 200) * 0.55; ay = 70; }
+        if (st.pause > 0) { ax = 200; ay = 80; }
+        const N = 4, h = dt / N;
+        for (let s = 0; s < N; s++) {
+          me.px = me.x; me.py = me.y; me.x += (tx - me.x) * Math.min(1, (s + 1) / N); me.y += (ty - me.y) * Math.min(1, (s + 1) / N);
+          me.vx = (me.x - me.px) / h; me.vy = (me.y - me.py) / h;
+          ai.px = ai.x; ai.py = ai.y; const adx = ax - ai.x, ady = ay - ai.y, ad = Math.hypot(adx, ady), mv = Math.min(ad, st.aiSpd * h);
+          if (ad > 0) { ai.x += adx / ad * mv; ai.y += ady / ad * mv; } ai.x = clamp(ai.x, L + MR, R - MR); ai.y = clamp(ai.y, T + MR, 300 - MR);
+          ai.vx = (ai.x - ai.px) / h; ai.vy = (ai.y - ai.py) / h;
+          if (st.pause > 0) continue;
+          p.x += p.vx * h; p.y += p.vy * h;
+          if (p.x < L + PR) { p.x = L + PR; p.vx = Math.abs(p.vx) * 0.9; }
+          if (p.x > R - PR) { p.x = R - PR; p.vx = -Math.abs(p.vx) * 0.9; }
+          const inGoal = Math.abs(p.x - 200) < GW;
+          if (p.y < T + PR) { if (inGoal) { if (p.y < T - PR) { goal('me'); return; } } else { p.y = T + PR; p.vy = Math.abs(p.vy) * 0.9; } }
+          if (p.y > Bt - PR) { if (inGoal) { if (p.y > Bt + PR) { goal('ai'); return; } } else { p.y = Bt - PR; p.vy = -Math.abs(p.vy) * 0.9; } }
+          collideMallet(me); collideMallet(ai);
+          const sp = Math.hypot(p.vx, p.vy); if (sp > 1150) { p.vx *= 1150 / sp; p.vy *= 1150 / sp; }
+        }
+        st.pause = Math.max(0, st.pause - dt);
+        p.vx *= Math.pow(0.82, dt); p.vy *= Math.pow(0.82, dt);
+        // stuck puck nudge
+        if (Math.hypot(p.vx, p.vy) < 8 && st.pause <= 0) { st.idle = (st.idle || 0) + dt; if (st.idle > 3) { p.vx = rand(-60, 60); p.vy = p.y < 300 ? 120 : -120; st.idle = 0; } } else st.idle = 0;
+      },
+      draw(c) {
+        c.fillStyle = '#5a6b80'; c.fillRect(0, 0, W, H);
+        c.fillStyle = '#eef8ff'; rr(c, L - 4, T - 4, R - L + 8, Bt - T + 8, 26); c.fill();
+        c.fillStyle = 'rgba(156,199,232,.25)'; for (let i = 0; i < 30; i++) for (let j = 0; j < 20; j++) { c.beginPath(); c.arc(30 + j * 18, 30 + i * 19, 1.3, 0, TAU); c.fill(); }
+        c.strokeStyle = '#e2483b'; c.lineWidth = 4; c.beginPath(); c.moveTo(L, 300); c.lineTo(R, 300); c.stroke();
+        c.strokeStyle = '#9cc7e8'; c.lineWidth = 3; c.beginPath(); c.arc(200, 300, 60, 0, TAU); c.stroke(); c.beginPath(); c.arc(200, T, 80, 0, Math.PI); c.stroke(); c.beginPath(); c.arc(200, Bt, 80, Math.PI, TAU); c.stroke();
+        c.fillStyle = '#1d1b2e'; rr(c, 200 - GW, 2, GW * 2, 12, 4); c.fill(); rr(c, 200 - GW, Bt, GW * 2, 12, 4); c.fill();
+        c.strokeStyle = C.ink; c.lineWidth = 4; rr(c, L - 4, T - 4, R - L + 8, Bt - T + 8, 26); c.stroke();
+        // score
+        c.font = olDispSafe(60); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = 'rgba(226,72,59,.18)'; c.fillText(String(st.sa), 200, 220); c.fillStyle = 'rgba(47,111,214,.18)'; c.fillText(String(st.sm), 200, 380);
+        // puck
+        const p = st.puck; c.fillStyle = 'rgba(0,0,0,.2)'; c.beginPath(); c.arc(p.x + 3, p.y + 4, PR, 0, TAU); c.fill();
+        c.fillStyle = '#1d1b2e'; c.beginPath(); c.arc(p.x, p.y, PR, 0, TAU); c.fill(); c.strokeStyle = '#555'; c.lineWidth = 2; c.beginPath(); c.arc(p.x, p.y, PR - 5, 0, TAU); c.stroke();
+        // mallets
+        const mallet = (m, col) => { c.fillStyle = 'rgba(0,0,0,.2)'; c.beginPath(); c.arc(m.x + 3, m.y + 5, MR, 0, TAU); c.fill(); c.fillStyle = col; c.beginPath(); c.arc(m.x, m.y, MR, 0, TAU); c.fill(); c.lineWidth = 3; c.strokeStyle = C.ink; c.stroke(); c.fillStyle = 'rgba(255,255,255,.3)'; c.beginPath(); c.arc(m.x, m.y, MR - 9, 0, TAU); c.fill(); };
+        mallet(st.ai, C.red); drawShreyas(c, st.ai.x, st.ai.y + 1, 15, { mood: st.flash && st.flash.who === 'me' ? 'shock' : st.flash ? 'grin' : 'happy', look: clamp((st.puck.x - st.ai.x) / 80, -1, 1) });
+        mallet(st.me, C.blue); drawYou(c, st.me.x, st.me.y + 1, 14, { mood: st.flash && st.flash.who === 'ai' ? 'sad' : 'happy' });
+        if (st.say) speechBubble(c, clamp(st.ai.x, 60, 340), st.ai.y + 34, st.say, { below: true, size: 14, maxW: 220 });
+        c.fillStyle = C.ink; c.font = funFont(13); c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText(`Shreyas ${st.sa}`, 20, 300 - 14); c.fillText(`You ${st.sm}`, 20, 300 + 14);
+        if (st.pause > 0 && !st.end) { c.fillStyle = C.ink; c.font = funFont(14); c.textAlign = 'center'; c.fillText(`First to ${WIN}`, 200, 300 + (st.puck.y > 300 ? -40 : 40)); }
+        fl.draw(c);
+        if (st.end) bigText(c, st.end === 'win' ? 'YOU WIN!' : 'SHREYAS WINS', 200, 300, 44, st.end === 'win' ? C.yellow : '#ff6b5e');
+      },
+      _dbg: { st, goal }
+    };
+  }
+});
+function olDispSafe(size) { return `${size}px ${getComputedStyle(document.documentElement).getPropertyValue('--display') || 'system-ui'}`; }
+
+/* ---------- 43. Penalty Shootout vs Shreyas ---------- */
+GAMES.push({
+  id: 'penalty', name: 'Penalty Shootout vs Shreyas', tag: 'Five kicks each. Shoot past Shreyas in goal, then dive to stop his shots. Watch his eyes… or don’t trust them.', badge: 'Versus', scoreLabel: 'Points',
+  howto: 'Your kick: drag from the ball to where you want to shoot and let go. Shreyas’s kick: tap the side of the goal to dive. Corners are hard to save!',
+  thumb(c, w, h) {
+    sky(c, '#8fd3ff', '#bfe9ff'); c.fillStyle = '#4caf50'; c.fillRect(0, h * 0.6, w, h * 0.4);
+    c.strokeStyle = '#fff'; c.lineWidth = 5; c.strokeRect(w * 0.15, h * 0.12, w * 0.7, h * 0.48);
+    c.strokeStyle = 'rgba(255,255,255,.4)'; c.lineWidth = 1; for (let i = 1; i < 10; i++) { c.beginPath(); c.moveTo(w * 0.15 + i * w * 0.07, h * 0.12); c.lineTo(w * 0.15 + i * w * 0.07, h * 0.6); c.stroke(); }
+    drawShreyasBody(c, w * 0.42, h * 0.6, h * 0.08, { arms: 'up', face: { mood: 'shock' } });
+    drawBall(c, w * 0.72, h * 0.24, h * 0.06, 0); c.fillStyle = '#fff'; c.beginPath(); c.arc(w * 0.5, h * 0.88, h * 0.06, 0, TAU); c.fill(); c.lineWidth = 2; c.strokeStyle = C.ink; c.stroke();
+  },
+  create(env) {
+    const GL = 60, GR = 340, GT = 110, GB = 300, BALL = { x: 200, y: 520 };
+    const st = { t: 0, turn: 0, phase: 'intro', phT: 0, my: [], his: [], drag: null, shot: null, keeper: { x: 200, tx: 200, dive: 0, side: 0, up: 0 }, you: { x: 200, tx: 200, dive: 0, side: 0, committed: false, up: 0 }, look: 0, say: null, sayT: 0, ended: false, score: 0, flash: null };
+    const fl = floaters();
+    function talk(t) { st.say = t; st.sayT = 2.2; FUN.say(t, 1.7, 1.15); }
+    const shooter = () => (st.turn % 2 === 0 ? 'me' : 'him');
+    function phase(p) { st.phase = p; st.phT = 0; }
+    function nextTurn() {
+      const m = st.my.filter(Boolean).length, s = st.his.filter(Boolean).length, mt = st.my.length, ht = st.his.length;
+      const done = (mt >= 5 && ht >= 5 && mt === ht && m !== s) || (mt <= 5 && ht <= 5 && (m > s + (5 - ht) || s > m + (5 - mt)));
+      if (done) { const win = m > s; phase('end'); talk(win ? 'NOOO! I demand a rematch!' : 'Shreyas wins the cup! Ehehehe!'); st.win = win; if (win) { st.score += 500; env.score(st.score); } return; }
+      st.turn++; st.shot = null; st.keeper = { x: 200, tx: 200, dive: 0, side: 0, up: 0 }; st.you = { x: 200, tx: 200, dive: 0, side: 0, committed: false, up: 0 };
+      if (shooter() === 'me') { phase('aim'); if (Math.random() < 0.5) talk(pick(['You’ll never get past me!', 'I can see everything. I have GLASSES.', 'Go on. Try it.'])); }
+      else { phase('runup'); st.target = { x: pick([GL + 35, 200, GR - 35, rand(GL + 30, GR - 30)]), y: pick([GT + 30, GB - 30, rand(GT + 30, GB - 30)]) }; st.look = Math.random() < 0.6 ? Math.sign(st.target.x - 200) : pick([-1, 0, 1]); talk(pick(['My turn. Get ready to cry.', 'Watch this.', 'Left? Right? Who knows!'])); }
+    }
+    function kick(tx, ty, by) {
+      const miss = tx < GL + 6 || tx > GR - 6 || ty < GT + 6;
+      st.shot = { x0: BALL.x, y0: BALL.y, tx, ty, t: 0, dur: by === 'me' ? 0.5 : 0.62, by, miss, result: null };
+      FUN.tone(180, 0.1, 'square', 0.08, 120);
+      if (by === 'me') {
+        const read = Math.random() < 0.45, sideX = read ? tx : pick([GL + 50, 200, GR - 50]);
+        st.keeper.tx = clamp(sideX, GL + 30, GR - 30); st.keeper.side = Math.sign(st.keeper.tx - 200); st.keeper.up = ty < 180 ? 1 : 0;
+      }
+      phase('fly');
+    }
+    function resolve() {
+      const s = st.shot; let saved = false;
+      const kp = s.by === 'me' ? st.keeper : st.you, reach = s.by === 'me' ? 50 : 56;
+      const handY = kp.up ? GT + 50 : GB - 60;
+      if (!s.miss) saved = Math.abs(kp.x - s.tx) < reach && (Math.abs(handY - s.ty) < 90 || Math.abs(kp.x - s.tx) < 26);
+      const goal = !s.miss && !saved;
+      if (s.by === 'me') {
+        st.my.push(goal);
+        if (goal) { st.score += 100; fl.add('GOAL!', 200, 200, C.yellow); talk(pick(['How?!', 'My glasses slipped!', 'That doesn’t count!'])); FUN.tone(660, 0.12, 'square', 0.07); FUN.tone(990, 0.2, 'square', 0.07, null, 0.12); }
+        else { fl.add(s.miss ? 'MISSED!' : 'SAVED!', 200, 200, '#ff8a8a'); talk(s.miss ? 'Ehehe, you missed the whole goal!' : pick(['SAVED! Shreyas the wall!', 'Nope!', 'Too easy.'])); FUN.tone(250, 0.25, 'sawtooth', 0.06, 140); }
+      } else {
+        st.his.push(goal);
+        if (goal) { fl.add('Shreyas scores', 200, 200, '#ff8a8a'); talk(pick(['GOOOAL! Shreyas!', 'Top bins, baby!', 'You dove the wrong way!'])); FUN.tone(250, 0.25, 'sawtooth', 0.06, 140); }
+        else { st.score += 100; fl.add(s.miss ? 'He missed!' : 'GREAT SAVE!', 200, 200, C.yellow); talk(s.miss ? 'The wind! It was the wind!' : pick(['WHAT?! Nobody saves my shots!', 'Lucky!', 'Okay, that was good.'])); FUN.tone(660, 0.12, 'square', 0.07); FUN.tone(990, 0.2, 'square', 0.07, null, 0.12); }
+      }
+      env.score(st.score); s.result = goal ? 'goal' : s.miss ? 'miss' : 'save'; phase('result');
+    }
+    phase('intro'); talk('Penalty shootout! Five kicks each. You go first.');
+    return {
+      down(x, y) {
+        FUN.audio();
+        if (st.phase === 'aim' && Math.hypot(x - BALL.x, y - BALL.y) < 70) st.drag = { x, y };
+        if ((st.phase === 'runup' || st.phase === 'fly') && shooter() === 'him' && !st.you.committed && y < 420) {
+          st.you.committed = true; st.you.tx = clamp(x, GL + 26, GR - 26); st.you.side = Math.sign(st.you.tx - 200) || 0; st.you.up = y < 200 ? 1 : 0;
+        }
+        if (st.phase === 'result' && st.phT > 0.6) nextTurn();
+        if (st.phase === 'intro' && st.phT > 0.4) { st.turn = -1; nextTurn(); }
+      },
+      move(x, y) { if (st.drag) st.drag = { x, y }; },
+      up() {
+        if (st.phase === 'aim' && st.drag) {
+          const d = st.drag; st.drag = null;
+          if (d.y > 420) return;
+          const wob = 10 + Math.abs(d.x - 200) * 0.06;
+          kick(d.x + rand(-wob, wob), clamp(d.y, 60, GB - 12) + rand(-wob, wob), 'me');
+        }
+      },
+      key(code, down) {
+        if (!down) return;
+        const map = { ArrowLeft: GL + 40, ArrowUp: 200, ArrowRight: GR - 40, ArrowDown: 200 };
+        if (map[code] != null && shooter() === 'him' && (st.phase === 'runup' || st.phase === 'fly') && !st.you.committed) { st.you.committed = true; st.you.tx = map[code]; st.you.side = Math.sign(map[code] - 200); st.you.up = code === 'ArrowUp' ? 1 : 0; }
+        if (map[code] != null && st.phase === 'aim') kick(map[code] + rand(-20, 20), code === 'ArrowUp' ? GT + 30 : GB - 40, 'me');
+        if ((code === 'Space' || code === 'Enter') && (st.phase === 'result' || st.phase === 'intro')) this.down(200, 500);
+      },
+      update(dt) {
+        st.t += dt; st.phT += dt; fl.step(dt); st.sayT -= dt; if (st.sayT <= 0) st.say = null;
+        const k = st.keeper, y = st.you;
+        k.x += (k.tx - k.x) * Math.min(1, dt * (k.side ? 9 : 4)); y.x += (y.tx - y.x) * Math.min(1, dt * 10);
+        if (k.side) k.dive = Math.min(1, k.dive + dt * 4); if (y.committed && y.side) y.dive = Math.min(1, y.dive + dt * 5);
+        if (st.phase === 'intro' && st.phT > 2.2) { st.turn = -1; nextTurn(); }
+        if (st.phase === 'aim' && shooter() === 'me') k.x = 200 + Math.sin(st.t * 2.2) * 18;
+        if (st.phase === 'runup' && st.phT > 1.3) kick(st.target.x + rand(-8, 8), st.target.y + rand(-8, 8), 'him');
+        if (st.phase === 'fly') { st.shot.t += dt; if (st.shot.t >= st.shot.dur) resolve(); }
+        if (st.phase === 'result' && st.phT > 2.4) nextTurn();
+        if (st.phase === 'end' && st.phT > 2.6 && !st.ended) { st.ended = true; env.over(st.score); }
+      },
+      draw(c) {
+        sky(c, '#8fd3ff', '#cdeeff');
+        c.fillStyle = '#7a8aa0'; c.fillRect(0, 40, W, 50); c.fillStyle = 'rgba(255,255,255,.5)'; for (let i = 0; i < 40; i++) { c.beginPath(); c.arc(i * 11, 55 + (i % 3) * 10, 4, 0, TAU); c.fill(); }
+        c.fillStyle = '#4caf50'; c.fillRect(0, GB - 10, W, H); c.fillStyle = 'rgba(255,255,255,.08)'; for (let i = 0; i < 6; i++) c.fillRect(0, GB + 20 + i * 50, W, 25);
+        c.strokeStyle = 'rgba(255,255,255,.8)'; c.lineWidth = 3; c.beginPath(); c.moveTo(20, GB + 50); c.lineTo(380, GB + 50); c.stroke();
+        // net
+        c.strokeStyle = 'rgba(255,255,255,.45)'; c.lineWidth = 1; for (let x = GL; x <= GR; x += 16) { c.beginPath(); c.moveTo(x, GT); c.lineTo(x, GB); c.stroke(); } for (let yy = GT; yy <= GB; yy += 16) { c.beginPath(); c.moveTo(GL, yy); c.lineTo(GR, yy); c.stroke(); }
+        // keeper
+        const meShoot = shooter() === 'me' || st.phase === 'intro';
+        if (meShoot) {
+          const k = st.keeper; c.save(); c.translate(k.x, GB); c.rotate(k.side * k.dive * 1.0); c.translate(-k.x, -GB);
+          drawShreyasBody(c, k.x, GB - (k.up ? k.dive * 40 : 0), 24, { arms: 'up', face: { mood: st.shot && st.shot.result === 'goal' ? 'sad' : st.shot && st.shot.result ? 'grin' : 'happy', look: Math.sin(st.t * 2) } }); c.restore();
+        } else {
+          const y = st.you; c.save(); c.translate(y.x, GB); c.rotate(y.side * y.dive * 1.0); c.translate(-y.x, -GB);
+          drawYouBody(c, y.x, GB - (y.up ? y.dive * 40 : 0), 24, { arms: 'up', face: { mood: st.shot && st.shot.result === 'save' ? 'laugh' : 'happy' } }); c.restore();
+        }
+        c.strokeStyle = '#fff'; c.lineWidth = 8; c.lineJoin = 'round'; c.beginPath(); c.moveTo(GL, GB); c.lineTo(GL, GT); c.lineTo(GR, GT); c.lineTo(GR, GB); c.stroke();
+        c.strokeStyle = C.ink; c.lineWidth = 2; c.beginPath(); c.moveTo(GL - 4, GB); c.lineTo(GL - 4, GT - 4); c.lineTo(GR + 4, GT - 4); c.lineTo(GR + 4, GB); c.stroke();
+        // shooter at the bottom
+        if (!meShoot && (st.phase === 'runup')) { const run = Math.min(1, st.phT / 1.3); drawShreyasBody(c, 200 - 70 + run * 50, 600 + 40 - run * 30, 26, { run: st.t * 12, face: { mood: 'grin', look: st.look } }); }
+        else if (!meShoot) drawShreyasBody(c, 180, 610, 26, { arms: 'shoot', face: { mood: 'grin', look: st.look } });
+        // ball
+        let bx = BALL.x, by = BALL.y, br = 18;
+        if (st.shot) { const s = st.shot, k = Math.min(1, s.t / s.dur), e = 1 - Math.pow(1 - k, 2); bx = s.x0 + (s.tx - s.x0) * e; by = s.y0 + (s.ty - s.y0) * e - Math.sin(k * Math.PI) * 30; br = 18 - 8 * e; }
+        if (st.phase === 'result' && st.shot) { const s = st.shot; bx = s.tx; by = s.result === 'save' ? s.ty + 40 : s.ty; br = 10; }
+        c.fillStyle = 'rgba(0,0,0,.2)'; ell(c, bx, (st.shot ? Math.max(by + br, GB) : by + br), br, br * 0.35); c.fill();
+        drawBall(c, bx, by, br, st.t * (st.shot ? 12 : 0));
+        if (st.drag) { const d = st.drag; c.strokeStyle = C.yellow; c.lineWidth = 4; c.setLineDash([10, 8]); c.beginPath(); c.moveTo(BALL.x, BALL.y); c.lineTo(d.x, d.y); c.stroke(); c.setLineDash([]); c.strokeStyle = C.red; c.lineWidth = 3; c.beginPath(); c.arc(d.x, d.y, 16, 0, TAU); c.moveTo(d.x - 24, d.y); c.lineTo(d.x + 24, d.y); c.moveTo(d.x, d.y - 24); c.lineTo(d.x, d.y + 24); c.stroke(); }
+        // scoreboard
+        c.fillStyle = 'rgba(29,27,46,.85)'; rr(c, 10, 6, 380, 32, 10); c.fill();
+        c.font = funFont(12); c.textBaseline = 'middle'; c.textAlign = 'left'; c.fillStyle = '#fff'; c.fillText('YOU', 20, 22); c.fillText('SHREYAS', 212, 22);
+        const dots = (arr, x0) => { for (let i = 0; i < Math.max(5, arr.length); i++) { c.fillStyle = i < arr.length ? (arr[i] ? C.green : C.red) : 'rgba(255,255,255,.25)'; c.beginPath(); c.arc(x0 + i * 16, 22, 6, 0, TAU); c.fill(); } };
+        dots(st.my, 62); dots(st.his, 285);
+        // prompts
+        c.fillStyle = C.ink; c.font = funFont(15); c.textAlign = 'center';
+        if (st.phase === 'aim') c.fillText(st.drag ? 'Let go to shoot!' : 'Drag from the ball to aim, then let go', 200, 580);
+        if ((st.phase === 'runup' || st.phase === 'fly') && !meShoot) c.fillText(st.you.committed ? 'Diving!' : 'TAP where to dive!', 200, 420);
+        if (st.phase === 'result') c.fillText('Tap to continue', 200, 580);
+        if (st.say) speechBubble(c, meShoot ? st.keeper.x : 200, meShoot ? GB - 128 : 470, st.say, { size: 14, maxW: 240, below: !meShoot ? false : false });
+        fl.draw(c);
+        if (st.phase === 'end') bigText(c, st.win ? 'YOU WIN!' : 'SHREYAS WINS', 200, 380, 44, st.win ? C.yellow : '#ff6b5e');
+      },
+      _dbg: { st, kick, nextTurn }
+    };
+  }
+});
+
+/* ---------- 44. Dance Battle vs Shreyas ---------- */
+GAMES.push({
+  id: 'dancebattle', name: 'Dance Battle vs Shreyas', tag: 'Shreyas busts a move, then you copy it. Hit the arrows on the beat and out-dance him over 3 rounds.', badge: 'Versus', scoreLabel: 'Points',
+  howto: 'Watch Shreyas dance, then it’s your turn with the same moves. Tap the lane (or press the arrow keys) when an arrow reaches the line.',
+  thumb(c, w, h) {
+    const g = c.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#2b1450'); g.addColorStop(1, '#5a2a8a'); c.fillStyle = g; c.fillRect(0, 0, w, h);
+    ['#ff5aa5', '#5ad1ff', '#ffd23f'].forEach((col, i) => { c.fillStyle = col; c.globalAlpha = 0.35; c.beginPath(); c.moveTo(w * (0.2 + i * 0.3), 0); c.lineTo(w * (0.1 + i * 0.3), h); c.lineTo(w * (0.3 + i * 0.3), h); c.closePath(); c.fill(); });
+    c.globalAlpha = 1; drawShreyasBody(c, w * 0.32, h * 0.95, h * 0.1, { arms: 'up', run: 1, face: { mood: 'cool' } }); drawYouBody(c, w * 0.7, h * 0.95, h * 0.1, { arms: 'shoot', run: 2, face: { mood: 'laugh' } });
+    c.font = `800 ${h * 0.14}px Rubik, system-ui`; c.fillStyle = '#fff'; c.textAlign = 'center'; c.fillText('VS', w / 2, h * 0.3);
+  },
+  create(env) {
+    const LX = [80, 160, 240, 320], HIT = 520, SPAWN = 300, TRAVEL = 1.15, ARROW = ['←', '↓', '↑', '→'], KEYS = { ArrowLeft: 0, ArrowDown: 1, ArrowUp: 2, ArrowRight: 3, KeyA: 0, KeyS: 1, KeyW: 2, KeyD: 3 };
+    const COLS = ['#ff5aa5', '#5ad1ff', '#7cff7a', '#ffd23f'], NOTES = [523, 587, 659, 784];
+    const st = { t: 0, round: 0, who: 'him', phase: 'intro', phT: 0, chart: [], song: 0, notes: [], his: 0, mine: 0, roundHis: 0, roundMine: 0, combo: 0, judge: null, pose: { him: 0, me: 0 }, poseT: { him: 0, me: 0 }, say: null, sayT: 0, beat: 0, ended: false, flashLane: [0, 0, 0, 0] };
+    const fl = floaters();
+    function talk(t) { st.say = t; st.sayT = 2.2; FUN.say(t, 1.8, 1.15); }
+    function makeChart(r) {
+      const bpm = [0, 112, 128, 144][r], beat = 60 / bpm, n = [0, 14, 20, 26][r], out = []; let tt = 1.5, last = -1;
+      for (let i = 0; i < n; i++) { let lane = Math.floor(Math.random() * 4); if (lane === last && Math.random() < 0.6) lane = (lane + 1 + Math.floor(Math.random() * 3)) % 4; last = lane; out.push({ t: tt, lane }); tt += beat * pick(r === 1 ? [1, 1, 2] : r === 2 ? [0.5, 1, 1, 1] : [0.5, 0.5, 1, 1]); if (r === 3 && Math.random() < 0.15) out.push({ t: tt - beat * 0.5 + 0.001, lane: (lane + 2) % 4 }); }
+      return { notes: out.sort((a, b) => a.t - b.t), beat, end: tt + 1.2 };
+    }
+    function startTurn(who) {
+      st.who = who; st.phase = 'play'; st.phT = 0; st.song = 0; st.combo = 0;
+      st.notes = st.chart.notes.map((n) => ({ t: n.t, lane: n.lane, done: false, res: null, hisRoll: Math.random() }));
+      if (who === 'him') { st.roundHis = 0; talk(pick(['Watch and learn!', 'Shreyas time!', 'Try to keep up!'])); } else { st.roundMine = 0; talk(pick(['Your turn. Copy me!', 'Go on, show me.', 'Bet you can’t.'])); }
+    }
+    function score(who, res, lane) {
+      const pts = res === 'perfect' ? 100 : res === 'good' ? 50 : 0;
+      if (who === 'me') { if (pts) { st.combo++; st.mine += pts + Math.min(50, st.combo * 2); st.roundMine += pts; } else st.combo = 0; env.score(st.mine); }
+      else { st.his += pts; st.roundHis += pts; }
+      st.judge = { text: res === 'perfect' ? 'PERFECT!' : res === 'good' ? 'Good' : 'Miss', t: 0.5, col: res === 'perfect' ? C.yellow : res === 'good' ? '#7cff7a' : '#ff6b5e' };
+      if (pts) { st.pose[who] = (st.pose[who] + 1) % 4; st.poseT[who] = 0.3; FUN.tone(NOTES[lane] * (res === 'perfect' ? 1 : 0.5), 0.14, 'square', 0.05); st.flashLane[lane] = 0.15; }
+      else { st.poseT[who] = -0.4; FUN.tone(120, 0.12, 'sawtooth', 0.05); }
+    }
+    function tapLane(l) {
+      if (st.phase !== 'play' || st.who !== 'me') return;
+      st.flashLane[l] = 0.1;
+      let best = null, bd = 1;
+      for (const n of st.notes) { if (n.done || n.lane !== l) continue; const d = Math.abs(n.t - st.song); if (d < bd) { bd = d; best = n; } }
+      if (best && bd < 0.16) { best.done = true; const res = bd < 0.075 ? 'perfect' : 'good'; best.res = res; score('me', res, l); }
+    }
+    function endTurn() {
+      if (st.who === 'him') { startTurn('me'); return; }
+      st.phase = 'roundEnd'; st.phT = 0;
+      const won = st.roundMine >= st.roundHis;
+      talk(won ? pick(['Okay… you’re not bad.', 'WHAT? How?', 'My shoes were untied!']) : pick(['Ehehehe! Too slow!', 'Shreyas, dance king!', 'Is that all you got?']));
+    }
+    talk('Dance battle! I go first, then you copy me.');
+    return {
+      down(x, y) { FUN.audio(); if (st.phase === 'intro' && st.phT > 0.5) { st.round = 1; st.chart = makeChart(1); startTurn('him'); return; } if (st.phase === 'roundEnd' && st.phT > 0.8) { this.next(); return; } if (y > 300) tapLane(clamp(Math.floor(x / 100), 0, 3)); },
+      next() {
+        if (st.round >= 3) { st.phase = 'end'; st.phT = 0; st.win = st.mine >= st.his; if (st.win) { st.mine += 1000; env.score(st.mine); } talk(st.win ? 'Noooo! You’re the dance king now.' : 'Shreyas wins! Bow down!'); return; }
+        st.round++; st.chart = makeChart(st.round); startTurn('him');
+      },
+      key(code, down) { if (!down) return; if (KEYS[code] != null) tapLane(KEYS[code]); else if (code === 'Space' || code === 'Enter') this.down(200, 100); },
+      update(dt) {
+        st.t += dt; st.phT += dt; fl.step(dt); st.sayT -= dt; if (st.sayT <= 0) st.say = null;
+        st.flashLane = st.flashLane.map((v) => Math.max(0, v - dt)); if (st.judge) { st.judge.t -= dt; if (st.judge.t <= 0) st.judge = null; }
+        ['him', 'me'].forEach((w) => { st.poseT[w] += dt; });
+        if (st.phase === 'intro' && st.phT > 2.5) { st.round = 1; st.chart = makeChart(1); startTurn('him'); }
+        if (st.phase === 'play') {
+          const prevBeat = Math.floor(st.song / st.chart.beat); st.song += dt; const b = Math.floor(st.song / st.chart.beat);
+          if (b !== prevBeat && st.song > 0.3 && st.song < st.chart.end - 1) { FUN.tone(70, 0.08, 'sine', 0.12, 40); st.beat = 0.1; }
+          st.beat = Math.max(0, st.beat - dt);
+          for (const n of st.notes) {
+            if (n.done) continue;
+            if (st.who === 'him' && st.song >= n.t + (n.hisRoll < 0.6 ? 0 : n.hisRoll < 0.85 ? 0.09 : 0.3)) { n.done = true; const r = n.hisRoll < 0.6 ? 'perfect' : n.hisRoll < 0.85 ? 'good' : 'miss'; n.res = r; score('him', r, n.lane); }
+            if (st.who === 'me' && st.song > n.t + 0.18) { n.done = true; n.res = 'miss'; score('me', 'miss', n.lane); }
+          }
+          if (st.song >= st.chart.end) endTurn();
+        }
+        if (st.phase === 'roundEnd' && st.phT > 3) this.next();
+        if (st.phase === 'end' && st.phT > 2.6 && !st.ended) { st.ended = true; env.over(st.mine); }
+      },
+      draw(c) {
+        const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#24103f'); g.addColorStop(1, '#4e2380'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+        COLS.forEach((col, i) => { c.fillStyle = col; c.globalAlpha = 0.12 + st.beat * 1.2; c.beginPath(); const sx = 60 + i * 95 + Math.sin(st.t + i) * 40; c.moveTo(sx, 0); c.lineTo(sx - 70, 300); c.lineTo(sx + 70, 300); c.closePath(); c.fill(); }); c.globalAlpha = 1;
+        // stage
+        c.fillStyle = '#1a0d2e'; c.fillRect(0, 262, W, 38); c.fillStyle = 'rgba(255,255,255,.08)'; for (let i = 0; i < 10; i++) c.fillRect(i * 44, 262, 40, 38);
+        const poseArms = (w) => (st.poseT[w] < 0 ? undefined : ['up', 'shoot', 'up', undefined][st.pose[w]]);
+        const hisActive = st.phase === 'play' && st.who === 'him', meActive = st.phase === 'play' && st.who === 'me';
+        const bounce = (w, active) => (active ? -Math.abs(Math.sin(st.song / (st.chart.beat || 0.5) * Math.PI)) * 10 : 0);
+        c.save(); if (st.poseT.him < 0) { c.translate(110, 270); c.rotate(Math.sin(st.t * 20) * 0.1); c.translate(-110, -270); }
+        drawShreyasBody(c, 110, 270 + bounce('him', hisActive), 26, { arms: poseArms('him'), run: hisActive ? st.song * 6 : 0, face: { mood: st.poseT.him < 0 ? 'shock' : hisActive ? 'cool' : 'grin' } }); c.restore();
+        c.save(); if (st.poseT.me < 0) { c.translate(290, 270); c.rotate(Math.sin(st.t * 20) * 0.1); c.translate(-290, -270); }
+        drawYouBody(c, 290, 270 + bounce('me', meActive), 26, { arms: poseArms('me'), run: meActive ? st.song * 6 : 0, face: { mood: st.poseT.me < 0 ? 'shock' : 'laugh' } }); c.restore();
+        c.font = funFont(13); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#fff';
+        c.fillText(`SHREYAS ${fmt(st.his)}`, 110, 18); c.fillText(`YOU ${fmt(st.mine)}`, 290, 18);
+        c.fillStyle = C.yellow; c.fillText(st.phase === 'play' ? (st.who === 'him' ? '★ Shreyas is dancing' : '★ YOUR TURN') : `Round ${st.round || 1} of 3`, 200, 40);
+        // lanes
+        for (let i = 0; i < 4; i++) {
+          c.fillStyle = `rgba(255,255,255,${0.05 + st.flashLane[i] * 2})`; c.fillRect(i * 100 + 4, 300, 92, 300);
+          c.strokeStyle = COLS[i]; c.lineWidth = 4; c.beginPath(); c.arc(LX[i], HIT, 28, 0, TAU); c.stroke();
+          c.fillStyle = 'rgba(255,255,255,.35)'; c.font = funFont(26); c.fillText(ARROW[i], LX[i], HIT + 1);
+        }
+        if (st.phase === 'play') for (const n of st.notes) {
+          if (n.done && n.res !== 'miss') continue; const dtn = n.t - st.song; if (dtn > TRAVEL || dtn < -0.35) continue;
+          const y = HIT - (dtn / TRAVEL) * (HIT - SPAWN); c.globalAlpha = n.done ? 0.3 : 1;
+          c.fillStyle = COLS[n.lane]; c.beginPath(); c.arc(LX[n.lane], y, 24, 0, TAU); c.fill(); c.lineWidth = 3; c.strokeStyle = C.ink; c.stroke();
+          c.fillStyle = C.ink; c.font = funFont(24); c.fillText(ARROW[n.lane], LX[n.lane], y + 1); c.globalAlpha = 1;
+        }
+        if (st.judge) bigText(c, st.judge.text, 200, 340, 30, st.judge.col);
+        if (st.combo > 3 && st.who === 'me' && st.phase === 'play') { c.fillStyle = '#fff'; c.font = funFont(14); c.fillText(`${st.combo} combo`, 200, 372); }
+        if (st.phase === 'roundEnd') { c.fillStyle = 'rgba(0,0,0,.55)'; rr(c, 50, 360, 300, 120, 16); c.fill(); bigText(c, st.roundMine >= st.roundHis ? 'You won the round!' : 'Shreyas won the round', 200, 395, 22, st.roundMine >= st.roundHis ? C.yellow : '#ff8a8a'); c.fillStyle = '#fff'; c.font = funFont(15); c.fillText(`You ${st.roundMine} · Shreyas ${st.roundHis}`, 200, 430); c.font = funFont(12); c.fillText('Tap to continue', 200, 458); }
+        if (st.phase === 'intro') { c.fillStyle = '#fff'; c.font = funFont(15); c.fillText('Tap to start', 200, 420); }
+        if (st.say) speechBubble(c, 110, 120, st.say, { size: 14, maxW: 220 });
+        fl.draw(c);
+        if (st.phase === 'end') bigText(c, st.win ? 'YOU WIN!' : 'SHREYAS WINS', 200, 420, 42, st.win ? C.yellow : '#ff6b5e');
+      },
+      _dbg: { st, tapLane }
+    };
+  }
+});
+
+/* ---------- 45. Where Are My Glasses? ---------- */
+GAMES.push({
+  id: 'glasses', name: 'Where Are My Glasses?', tag: 'Shreyas lost his glasses and can barely see. Steer him around the furniture (and the LEGO) to find them.', badge: 'Funny', scoreLabel: 'Points',
+  howto: 'Shreyas keeps walking. Tap the left or right side to turn him (or use the arrow keys). Avoid LEGO bricks. Find the glasses before time runs out!',
+  thumb(c, w, h) {
+    c.fillStyle = '#e9dcc4'; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#8a5a2b'; c.fillRect(w * 0.1, h * 0.15, w * 0.25, h * 0.2); c.fillStyle = '#6b8e4e'; c.fillRect(w * 0.65, h * 0.6, w * 0.2, h * 0.25);
+    drawShreyas(c, w * 0.45, h * 0.55, h * 0.18, { noGlasses: true, mood: 'shock', blink: true });
+    const g = c.createRadialGradient(w * 0.45, h * 0.55, h * 0.15, w * 0.45, h * 0.55, h * 0.55); g.addColorStop(0, 'rgba(240,236,228,0)'); g.addColorStop(1, 'rgba(240,236,228,.95)'); c.fillStyle = g; c.fillRect(0, 0, w, h);
+    c.strokeStyle = C.ink; c.lineWidth = 3; rr(c, w * 0.72, h * 0.18, w * 0.08, h * 0.08, 3); c.stroke(); rr(c, w * 0.82, h * 0.18, w * 0.08, h * 0.08, 3); c.stroke();
+    c.font = `${h * 0.12}px system-ui, "Apple Color Emoji", "Noto Color Emoji"`; c.fillText('✨', w * 0.88, h * 0.14);
+  },
+  create(env) {
+    const CS = 40, COLS = 10, ROWS = 13, OY = 60, DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+    const st = { level: 0, grid: null, legos: [], gx: 0, gy: 0, px: 0, py: 0, dir: 1, q: null, prog: 0, speed: 2, hearts: 3, time: 0, score: 0, glasses: null, bubble: null, bT: 0, ouch: 0, done: false, overT: 0, found: 0, t: 0, fog: 140, trail: [] };
+    const fl = floaters();
+    const BUMP = ['Is that you, Mom? Oh. It’s a lamp.', 'Sorry, sir! …It’s a chair.', 'Who put a wall there?!', 'Excuse me, Mr. Bookshelf.', 'Ow. Rude table.', 'Hello? Hello? It’s a plant.'];
+    function say(t) { st.bubble = t; st.bT = 2; FUN.say(t, 1.8, 1.15); }
+    function free(x, y) { return x >= 0 && y >= 0 && x < COLS && y < ROWS && !st.grid[y][x]; }
+    function build() {
+      st.level++; const L = st.level;
+      for (let tries = 0; tries < 60; tries++) {
+        const g = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+        const blocks = 6 + L * 3;
+        for (let i = 0; i < blocks; i++) { const w = 1 + Math.floor(Math.random() * 3), h = 1 + Math.floor(Math.random() * 2), x = Math.floor(Math.random() * (COLS - w + 1)), y = Math.floor(Math.random() * (ROWS - h + 1)), type = 1 + Math.floor(Math.random() * 4); for (let a = 0; a < w; a++) for (let b = 0; b < h; b++) g[y + b][x + a] = type; }
+        const sx = Math.floor(COLS / 2), sy = ROWS - 1; g[sy][sx] = 0; g[sy - 1][sx] = 0;
+        // BFS for reachable cells
+        const seen = new Set([sx + ',' + sy]), qq = [[sx, sy]], far = [];
+        while (qq.length) { const [x, y] = qq.shift(); far.push([x, y]); for (const [dx, dy] of DIRS) { const nx = x + dx, ny = y + dy; if (nx >= 0 && ny >= 0 && nx < COLS && ny < ROWS && !g[ny][nx] && !seen.has(nx + ',' + ny)) { seen.add(nx + ',' + ny); qq.push([nx, ny]); } } }
+        const cand = far.filter(([x, y]) => Math.abs(x - sx) + Math.abs(y - sy) >= 7 + Math.min(L, 6));
+        if (cand.length < 3 || far.length < 40) continue;
+        st.grid = g; const gl = pick(cand); st.glasses = { x: gl[0], y: gl[1] };
+        st.legos = []; const spots = far.filter(([x, y]) => Math.abs(x - sx) + Math.abs(y - sy) > 2 && !(x === gl[0] && y === gl[1]));
+        for (let i = 0; i < Math.min(spots.length, 2 + L * 2); i++) { const s = spots.splice(Math.floor(Math.random() * spots.length), 1)[0]; st.legos.push({ x: s[0], y: s[1], col: pick([C.red, C.blue, C.yellow, C.green]) }); }
+        st.gx = sx; st.gy = sy; st.px = sx; st.py = sy; st.dir = 0; st.q = null; st.prog = 0;
+        st.speed = Math.min(4.2, 1.9 + L * 0.25); st.time = 32 + Math.max(0, 6 - L) * 2; st.fog = Math.max(70, 150 - L * 12); st.trail = [];
+        say(L === 1 ? 'I can’t see ANYTHING. Where are my glasses?' : pick(['Not again!', 'I dropped them AGAIN.', 'Glasses? Hello? Glasses?']));
+        return;
+      }
+    }
+    function turn(rel) { st.q = ((st.q == null ? st.dir : st.q) + rel + 4) % 4; }
+    function setDir(d) { st.q = d; }
+    build();
+    return {
+      down(x) { FUN.audio(); if (st.done) return; turn(x < 200 ? -1 : 1); },
+      key(code, down) { if (!down) return; const m = { ArrowUp: 0, KeyW: 0, ArrowRight: 1, KeyD: 1, ArrowDown: 2, KeyS: 2, ArrowLeft: 3, KeyA: 3 }; if (m[code] != null) setDir(m[code]); },
+      update(dt) {
+        st.t += dt; fl.step(dt); st.bT -= dt; if (st.bT <= 0) st.bubble = null; st.ouch = Math.max(0, st.ouch - dt);
+        if (st.done) { st.overT -= dt; if (st.overT <= 0 && !st.ended) { st.ended = true; env.over(st.score); } return; }
+        if (st.found > 0) { st.found -= dt; if (st.found <= 0) build(); return; }
+        st.time -= dt; if (st.time <= 0) { st.done = true; st.overT = 1.6; say('I give up. I’ll just wear Nani’s glasses.'); return; }
+        st.prog += st.speed * dt;
+        if (st.prog >= 1) {
+          st.prog = 0;
+          if (!free(st.gx + DIRS[st.dir][0], st.gy + DIRS[st.dir][1])) { const o = [0, 1, 2, 3].filter((d) => free(st.gx + DIRS[d][0], st.gy + DIRS[d][1])); if (o.length) st.dir = pick(o); return; }
+          st.gx = st.gx + DIRS[st.dir][0]; st.gy = st.gy + DIRS[st.dir][1];
+          st.trail.push({ x: st.gx, y: st.gy }); if (st.trail.length > 30) st.trail.shift();
+          if (st.gx === st.glasses.x && st.gy === st.glasses.y) {
+            const bonus = 100 * st.level + Math.ceil(st.time) * 5; st.score += bonus; env.score(st.score); st.found = 2;
+            fl.add(`+${bonus}`, 200, 300, C.yellow); say(pick(['I CAN SEE! Hi! You look weird.', 'MY GLASSES! My beautiful glasses!', 'Found them! Wow, the world is so sharp!']));
+            FUN.tone(660, 0.1, 'triangle', 0.07); FUN.tone(880, 0.1, 'triangle', 0.07, null, 0.1); FUN.tone(1320, 0.2, 'triangle', 0.07, null, 0.2); return;
+          }
+          const lg = st.legos.findIndex((l) => l.x === st.gx && l.y === st.gy);
+          if (lg >= 0) { st.legos.splice(lg, 1); st.hearts--; st.ouch = 0.8; say('OWWW! LEGO!!!'); FUN.tone(180, 0.3, 'sawtooth', 0.09, 90); fl.add('-1 ❤', 200, 300, '#ff8a8a'); if (st.hearts <= 0) { st.done = true; st.overT = 1.8; return; } }
+          if (st.q != null) { st.dir = st.q; st.q = null; }
+          const nx = st.gx + DIRS[st.dir][0], ny = st.gy + DIRS[st.dir][1];
+          if (!free(nx, ny)) {
+            say(pick(BUMP)); FUN.tone(140, 0.12, 'square', 0.07, 90); st.ouch = 0.4;
+            const opts = [1, 3, 2].map((r) => (st.dir + r) % 4).filter((d) => free(st.gx + DIRS[d][0], st.gy + DIRS[d][1]));
+            st.dir = opts.length ? (Math.random() < 0.5 ? opts[0] : pick(opts)) : (st.dir + 2) % 4;
+          }
+        }
+        const k = Math.max(0, st.prog); st.px = st.gx + DIRS[st.dir][0] * k; st.py = st.gy + DIRS[st.dir][1] * k;
+      },
+      draw(c) {
+        c.fillStyle = '#e9dcc4'; c.fillRect(0, 0, W, H);
+        c.fillStyle = 'rgba(0,0,0,.04)'; for (let i = 0; i < COLS; i++) for (let j = 0; j < ROWS; j++) if ((i + j) % 2) c.fillRect(i * CS, OY + j * CS, CS, CS);
+        const furn = { 1: ['#8a5a2b', '#6b4420'], 2: ['#6b8e4e', '#4f6e38'], 3: ['#c2307a', '#962560'], 4: ['#5b6b88', '#435069'] };
+        for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) { const v = st.grid[y][x]; if (!v) continue; c.fillStyle = furn[v][0]; c.fillRect(x * CS, OY + y * CS, CS, CS); c.fillStyle = furn[v][1]; c.fillRect(x * CS, OY + y * CS + CS - 8, CS, 8); c.strokeStyle = 'rgba(0,0,0,.25)'; c.lineWidth = 1; c.strokeRect(x * CS + 0.5, OY + y * CS + 0.5, CS - 1, CS - 1); }
+        for (const l of st.legos) { const x = l.x * CS + 20, y = OY + l.y * CS + 22; c.fillStyle = l.col; rr(c, x - 12, y - 6, 24, 14, 3); c.fill(); c.strokeStyle = C.ink; c.lineWidth = 2; c.stroke(); for (let i = -1; i <= 1; i += 2) { c.beginPath(); c.arc(x + i * 6, y - 7, 3.5, 0, TAU); c.fill(); c.stroke(); } }
+        const gx = st.glasses.x * CS + 20, gy = OY + st.glasses.y * CS + 20;
+        c.strokeStyle = C.ink; c.lineWidth = 3; rr(c, gx - 15, gy - 5, 13, 11, 3); c.stroke(); rr(c, gx + 2, gy - 5, 13, 11, 3); c.stroke();
+        const sx = st.px * CS + 20, sy = OY + st.py * CS + 20;
+        drawShreyas(c, sx, sy - 2, 17, { noGlasses: st.found <= 0, mood: st.ouch > 0 ? 'shock' : st.found > 0 ? 'grin' : 'happy', blink: st.found <= 0 && Math.sin(st.t * 3) > 0.2, rot: Math.sin(st.t * 10) * 0.08 });
+        // blurry vision fog
+        if (st.found <= 0) {
+          const g = c.createRadialGradient(sx, sy, st.fog * 0.35, sx, sy, st.fog); g.addColorStop(0, 'rgba(236,230,220,0)'); g.addColorStop(1, 'rgba(236,230,220,.97)');
+          c.fillStyle = g; c.fillRect(0, OY, W, H - OY);
+          c.globalAlpha = 0.35 + 0.25 * Math.sin(st.t * 5); c.font = '22px system-ui, "Apple Color Emoji", "Noto Color Emoji"'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('✨', gx, gy - 4); c.globalAlpha = 1;
+          const nd = DIRS[st.q == null ? st.dir : st.q]; c.fillStyle = 'rgba(29,27,46,.5)'; c.beginPath(); c.moveTo(sx + nd[0] * 30, sy + nd[1] * 30); c.lineTo(sx + nd[0] * 20 - nd[1] * 7, sy + nd[1] * 20 + nd[0] * 7); c.lineTo(sx + nd[0] * 20 + nd[1] * 7, sy + nd[1] * 20 - nd[0] * 7); c.closePath(); c.fill();
+        }
+        // HUD
+        c.fillStyle = '#1d1b2e'; c.fillRect(0, 0, W, OY);
+        c.fillStyle = '#fff'; c.font = funFont(14); c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText(`Room ${st.level}`, 12, 20); c.fillText(`⏱ ${Math.ceil(Math.max(0, st.time))}s`, 12, 42);
+        c.textAlign = 'right'; c.fillText(fmt(st.score), 388, 20); c.font = '15px system-ui, "Apple Color Emoji", "Noto Color Emoji"'; c.fillText('❤️'.repeat(Math.max(0, st.hearts)), 388, 42);
+        const dist = Math.abs(st.gx - st.glasses.x) + Math.abs(st.gy - st.glasses.y);
+        c.textAlign = 'center'; c.font = funFont(14); c.fillStyle = dist <= 3 ? '#ff6b5e' : dist <= 6 ? C.orange : '#8fb8ff'; c.fillText(st.found > 0 ? 'FOUND!' : dist <= 3 ? '🔥 Super hot!' : dist <= 6 ? 'Warmer…' : '❄️ Cold', 200, 30);
+        if (st.bubble) speechBubble(c, sx, sy - 20, st.bubble, { size: 13, maxW: 220, below: sy < 200 });
+        fl.draw(c);
+        if (st.done) bigText(c, st.hearts <= 0 ? 'Too many LEGOs!' : 'Time’s up!', 200, 320, 36, '#ff6b5e');
+      },
+      _dbg: { st, build, turn }
+    };
+  }
+});
+
+/* ---------- 46. Mom's Coming! ---------- */
+GAMES.push({
+  id: 'momcoming', name: 'Mom’s Coming!', tag: 'Shreyas is gaming instead of studying. Rack up points, but switch to homework before Mom opens the door!', badge: 'Funny', scoreLabel: 'Points',
+  howto: 'Tap the targets on the screen to score. When you hear footsteps, hit STUDY before the door opens. Dad and Nani visit too…',
+  thumb(c, w, h) {
+    c.fillStyle = '#f3d9b5'; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#8a5a2b'; c.fillRect(w * 0.05, h * 0.15, w * 0.25, h * 0.7); c.fillStyle = 'rgba(0,0,0,.6)'; c.fillRect(w * 0.05, h * 0.15, w * 0.12, h * 0.7);
+    c.fillStyle = '#1d1b2e'; rr(c, w * 0.4, h * 0.12, w * 0.52, h * 0.45, 8); c.fill(); c.fillStyle = '#3ad17a'; c.fillRect(w * 0.43, h * 0.16, w * 0.46, h * 0.37);
+    drawEgg(c, w * 0.6, h * 0.32, h * 0.06, true); drawEgg(c, w * 0.75, h * 0.38, h * 0.06);
+    drawFam(c, w * 0.15, h * 0.42, h * 0.13, 'mom', { mood: 'mad' });
+    drawShreyas(c, w * 0.65, h * 0.82, h * 0.15, { mood: 'shock' });
+  },
+  create(env) {
+    const MON = { x: 130, y: 100, w: 252, h: 190 };
+    const st = { t: 0, clock: 90, mode: 'game', score: 0, targets: [], spawnT: 0.4, ev: null, evT: rand(4, 6), door: 0, visitor: null, visT: 0, bubble: null, bT: 0, steps: [], caught: false, overT: 0, visits: 0, combo: 0, lastHit: 0, studyT: 0, pressed: 0 };
+    const fl = floaters();
+    const btn = { x: 70, y: 520, w: 260, h: 60 };
+    function say(t, who, pitch) { st.bubble = { t, who }; st.bT = 2.4; FUN.say(t, pitch == null ? 1.8 : pitch, 1.1); }
+    function toggle() {
+      if (st.caught) return; st.mode = st.mode === 'game' ? 'study' : 'game'; st.pressed = 0.15;
+      FUN.tone(st.mode === 'study' ? 400 : 700, 0.06, 'square', 0.05);
+    }
+    function schedule() {
+      const fake = Math.random() < 0.25, fast = Math.max(0.55, 1 - st.visits * 0.06);
+      st.ev = { stage: 0, t: 0, fake, who: fake ? null : (Math.random() < 0.7 ? 'mom' : pick(['dad', 'nani'])), d1: rand(1.0, 1.6) * fast, d2: rand(0.8, 1.3) * fast, d3: 0.55 * fast };
+    }
+    function step(vol, f) { FUN.tone(f || 90, 0.09, 'sine', vol, 60); }
+    function visit(who) {
+      st.visitor = who; st.visT = 2.4; st.visits++; const gaming = st.mode === 'game';
+      if (who === 'mom') {
+        if (gaming) { st.caught = true; st.overT = 2.4; say('SHREYAS!!! GAMING AGAIN?!', 'mom', 1.2); FUN.tone(200, 0.6, 'sawtooth', 0.09, 100); return; }
+        st.score += 25; fl.add('+25 good boy', 200, 300, C.yellow); say(pick(['Studying so hard! Good boy.', 'Proud of you, beta!', 'Wow, homework! Who are you?']), 'mom', 1.3);
+      } else if (who === 'dad') {
+        if (gaming) { st.score += 300; fl.add('+300 Dad joins in!', 200, 300, C.yellow); say('Ooh, gaming? Move over, I’m playing!', 'dad', 0.7); }
+        else { say('Homework? Boring. Carry on.', 'dad', 0.7); }
+      } else { st.score += 40; fl.add('+40 snacks', 200, 300, C.yellow); say(gaming ? 'Gaming? Whatever. Eat this laddoo.' : 'Studying! Have ten laddoos.', 'nani', 1.5); }
+      env.score(st.score);
+    }
+    schedule();
+    return {
+      down(x, y) {
+        FUN.audio(); if (st.caught) return;
+        if (inBox(x, y, btn)) { toggle(); return; }
+        if (st.mode === 'game' && inBox(x, y, MON)) {
+          const i = st.targets.findIndex((tg) => Math.hypot(x - tg.x, y - tg.y) < tg.r + 6);
+          if (i >= 0) {
+            const tg = st.targets.splice(i, 1)[0]; st.combo = st.t - st.lastHit < 1 ? st.combo + 1 : 1; st.lastHit = st.t;
+            const pts = (tg.gold ? 50 : 10) * Math.min(5, st.combo); st.score += pts; env.score(st.score); fl.add('+' + pts, tg.x, tg.y, tg.gold ? C.yellow : '#7cff7a');
+            FUN.tone(tg.gold ? 1200 : 800, 0.05, 'square', 0.05);
+          }
+        }
+      },
+      key(code, down) { if (down && (code === 'Space' || code === 'Tab')) toggle(); },
+      update(dt) {
+        st.t += dt; fl.step(dt); st.bT -= dt; if (st.bT <= 0) st.bubble = null; st.pressed = Math.max(0, st.pressed - dt);
+        if (st.caught) { st.overT -= dt; if (st.overT <= 0 && !st.ended) { st.ended = true; env.over(st.score); } return; }
+        if (!st.visitor) { st.clock -= dt; if (st.clock <= 0) { st.clock = 0; st.caught = true; st.bedtime = true; st.overT = 2.2; say('9 PM! Bedtime! You survived!', 'mom', 1.3); st.score += 200; env.score(st.score); st.visitor = 'mom'; st.door = 1; return; } }
+        if (st.mode === 'game') {
+          st.spawnT -= dt; if (st.spawnT <= 0) { st.spawnT = rand(0.35, 0.7); st.targets.push({ x: rand(MON.x + 24, MON.x + MON.w - 24), y: rand(MON.y + 24, MON.y + MON.h - 24), r: rand(14, 20), t: 0, life: rand(1, 1.6), gold: Math.random() < 0.12 }); }
+        }
+        st.targets.forEach((tg) => { tg.t += dt; }); st.targets = st.targets.filter((tg) => tg.t < tg.life);
+        if (st.visitor) { st.visT -= dt; st.door = Math.max(0, st.door - (st.visT < 0.6 ? dt * 2 : 0)); if (st.visT <= 0) { st.visitor = null; st.door = 0; schedule(); } return; }
+        const e = st.ev; if (!e) return;
+        if (e.stage === 0) { st.evT -= dt; if (st.evT <= 0) { e.stage = 1; e.t = 0; } return; }
+        e.t += dt;
+        if (e.stage === 1) { if (Math.floor(e.t * 3) !== Math.floor((e.t - dt) * 3)) step(0.05); if (e.t >= e.d1) { e.stage = 2; e.t = 0; } }
+        else if (e.stage === 2) {
+          if (Math.floor(e.t * 4) !== Math.floor((e.t - dt) * 4)) step(0.11);
+          if (e.t >= e.d2) { if (e.fake) { e.stage = 9; e.t = 0; fl.add('…false alarm', 60, 250, '#fff'); } else { e.stage = 3; e.t = 0; FUN.tone(1300, 0.08, 'square', 0.05); FUN.tone(1100, 0.08, 'square', 0.05, null, 0.12); } }
+        }
+        else if (e.stage === 3) { st.door = Math.min(0.15, e.t / e.d3 * 0.15); if (e.t >= e.d3) { st.door = 1; st.ev = null; visit(e.who); st.evT = rand(2.5, 6) * Math.max(0.5, 1 - st.visits * 0.05); } }
+        else if (e.stage === 9) { if (Math.floor(e.t * 2) !== Math.floor((e.t - dt) * 2)) step(0.03); if (e.t > 1.2) { st.ev = null; st.evT = rand(2, 5); schedule(); } }
+        if (!st.ev && !st.visitor) { schedule(); st.ev.stage = 0; }
+      },
+      draw(c) {
+        c.fillStyle = '#f3d9b5'; c.fillRect(0, 0, W, H); c.fillStyle = 'rgba(194,48,122,.07)'; for (let i = 0; i < 12; i++) c.fillRect(i * 36, 0, 16, 380);
+        // door
+        c.fillStyle = '#3a2412'; c.fillRect(10, 90, 104, 290);
+        const open = st.door;
+        if (open > 0) { c.fillStyle = '#fff3c4'; c.fillRect(14, 94, 96, 286); if (st.visitor) { drawFamBody(c, 62, 200, 34, st.visitor); drawFam(c, 62, 200, 34, st.visitor, { mood: st.caught && !st.bedtime ? 'mad' : st.visitor === 'mom' ? 'love' : 'laugh', mouth: st.bT > 0.5 ? 0.2 + 0.8 * Math.abs(Math.sin(st.t * 16)) : null }); } }
+        c.save(); c.translate(14, 94); c.scale(1 - open * 0.85, 1); c.fillStyle = '#8a5a2b'; c.fillRect(0, 0, 96, 286); c.strokeStyle = '#6b4420'; c.lineWidth = 3; c.strokeRect(10, 14, 76, 110); c.strokeRect(10, 150, 76, 120);
+        c.fillStyle = '#e8c040'; const jig = st.ev && st.ev.stage === 3 ? Math.sin(st.t * 60) * 0.4 : 0; c.save(); c.translate(80, 150); c.rotate(jig); c.fillRect(-4, -3, 14, 6); c.restore(); c.restore();
+        const e = st.ev; if (e && e.stage >= 1 && e.stage <= 3) { c.fillStyle = `rgba(0,0,0,${e.stage === 1 ? 0.2 : 0.45})`; c.fillRect(14, 372, 96, 8); c.font = funFont(e.stage === 1 ? 12 : 16); c.fillStyle = e.stage === 1 ? '#7a5a3a' : C.red; c.textAlign = 'center'; c.fillText(e.stage === 3 ? '🚪 !!!' : '👣 thump', 62, 76 + Math.sin(st.t * 10) * 2); }
+        // desk + monitor
+        c.fillStyle = '#9a6332'; c.fillRect(120, 360, 280, 26); c.fillStyle = '#1d1b2e'; rr(c, MON.x - 8, MON.y - 8, MON.w + 16, MON.h + 16, 10); c.fill(); c.fillRect(MON.x + MON.w / 2 - 10, MON.y + MON.h + 6, 20, 60);
+        c.save(); rr(c, MON.x, MON.y, MON.w, MON.h, 4); c.clip();
+        if (st.mode === 'game') {
+          const g = c.createLinearGradient(0, MON.y, 0, MON.y + MON.h); g.addColorStop(0, '#2b1450'); g.addColorStop(1, '#0f4f6b'); c.fillStyle = g; c.fillRect(MON.x, MON.y, MON.w, MON.h);
+          c.fillStyle = 'rgba(255,255,255,.6)'; for (let i = 0; i < 20; i++) c.fillRect(MON.x + (i * 53 + st.t * 30) % MON.w, MON.y + (i * 37) % MON.h, 2, 2);
+          for (const tg of st.targets) { const s = Math.min(1, tg.t * 6) * (tg.t > tg.life - 0.2 ? (tg.life - tg.t) * 5 : 1); c.save(); c.translate(tg.x, tg.y); c.scale(s, s); drawEgg(c, 0, 0, tg.r, tg.gold); c.restore(); }
+          c.fillStyle = '#fff'; c.font = funFont(11); c.textAlign = 'left'; c.fillText('EGG BLASTER 3000', MON.x + 8, MON.y + 14);
+        } else {
+          c.fillStyle = '#fff'; c.fillRect(MON.x, MON.y, MON.w, MON.h); c.fillStyle = C.ink; c.font = funFont(16); c.textAlign = 'center'; c.fillText('MATH HOMEWORK', MON.x + MON.w / 2, MON.y + 30);
+          c.font = funFont(14, 600); ['1. 12 × 8 = ?', '2. Solve for x: 2x + 3 = 11', '3. Why is Shreyas like this?'].forEach((l, i) => c.fillText(l, MON.x + MON.w / 2, MON.y + 70 + i * 34));
+        }
+        c.restore();
+        // Shreyas from the front, below the screen
+        drawShreyas(c, 256, 432, 40, { mood: st.caught ? 'sad' : st.ev && st.ev.stage >= 2 ? 'shock' : st.mode === 'game' ? 'cool' : 'happy', look: st.ev && st.ev.stage >= 1 ? -1 : 0 });
+        c.fillStyle = C.shirt; rr(c, 206, 466, 100, 40, 14); c.fill();
+        if (st.mode === 'study') { c.fillStyle = C.blue; c.fillRect(220, 470, 72, 30); c.strokeStyle = C.ink; c.lineWidth = 2; c.strokeRect(220, 470, 72, 30); c.fillStyle = '#fff'; c.font = funFont(10); c.textAlign = 'center'; c.fillText('MATH', 256, 486); }
+        else { c.fillStyle = '#333'; rr(c, 222, 470, 68, 26, 10); c.fill(); c.fillStyle = C.red; c.beginPath(); c.arc(276, 480, 4, 0, TAU); c.fill(); }
+        // button
+        funButton(c, btn.x, btn.y, btn.w, btn.h, st.mode === 'game' ? '📖 STUDY! (Space)' : '🎮 Back to gaming', { fill: st.mode === 'game' ? C.yellow : C.green, color: st.mode === 'game' ? C.ink : '#fff', size: 19, pressed: st.pressed > 0 });
+        bigText(c, fmt(st.score), 330, 50, 34, C.yellow);
+        if (st.bubble) { const b = st.bubble; speechBubble(c, b.who ? 70 : 256, b.who ? 160 : 380, b.t, { size: 15, maxW: 260, title: b.who ? FAM[b.who].name : null }); }
+        fl.draw(c);
+        if (st.caught) bigText(c, st.bedtime ? 'BEDTIME! +200' : 'BUSTED!', 250, 330, 46, st.bedtime ? C.green : '#ff6b5e');
+        const mins = Math.floor((90 - st.clock) / 90 * 60); c.fillStyle = C.ink; c.font = funFont(14); c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText(`🕗 8:${String(mins).padStart(2, '0')} PM · bedtime at 9`, 12, 30);
+      },
+      _dbg: { st, toggle, visit }
+    };
+  }
+});
+
+/* ---------- 47. Hot Sauce Challenge ---------- */
+GAMES.push({
+  id: 'hotsauce', name: 'Shreyas Hot Sauce Challenge', tag: 'Every wing is spicier than the last. Help Shreyas eat them without his head exploding. Milk helps. A little.', badge: 'Funny', scoreLabel: 'Points',
+  howto: 'Tap BITE to eat (4 bites per wing, 8 seconds each). Spice keeps burning after each bite. Use MILK to cool down, but you only get 2 per wing. Don’t hit 100!',
+  thumb(c, w, h) {
+    sky(c, '#ffd28a', '#ff8a4c'); drawShreyas(c, w * 0.45, h * 0.48, h * 0.26, { mood: 'shock' });
+    c.fillStyle = 'rgba(226,40,30,.4)'; c.beginPath(); c.arc(w * 0.45, h * 0.5, h * 0.24, 0, TAU); c.fill();
+    c.fillStyle = 'rgba(255,255,255,.7)'; for (let i = 0; i < 3; i++) { c.beginPath(); c.arc(w * 0.18 - i * 6, h * (0.4 - i * 0.1), 8 + i * 4, 0, TAU); c.fill(); c.beginPath(); c.arc(w * 0.72 + i * 6, h * (0.4 - i * 0.1), 8 + i * 4, 0, TAU); c.fill(); }
+    c.fillStyle = C.red; rr(c, w * 0.8, h * 0.55, w * 0.1, h * 0.35, 6); c.fill(); c.lineWidth = 2; c.strokeStyle = C.ink; c.stroke(); c.fillStyle = '#fff'; c.font = `800 ${h * 0.06}px Rubik, system-ui`; c.textAlign = 'center'; c.fillText('🔥', w * 0.85, h * 0.75);
+  },
+  create(env) {
+    const LV = ['Mild', 'Medium', 'Hot', 'Extra Hot', 'Inferno', 'Ghost Pepper', 'Lava', 'Shreyas-Melter', 'Sun Sauce', 'Black Hole'];
+    const st = { t: 0, wing: 0, bites: 0, heat: 0, pend: 0, milk: 2, time: 8, score: 0, bubble: null, bT: 0, boom: false, overT: 0, chew: 0, steam: [], sweat: [], pressB: 0, pressM: 0, lastLine: 0, gulp: 0 };
+    const fl = floaters();
+    const bBite = { x: 24, y: 512, w: 170, h: 70 }, bMilk = { x: 206, y: 512, w: 170, h: 70 };
+    function say(t, p) { st.bubble = t; st.bT = 2; FUN.say(t, p == null ? 1.8 : p, 1.15); }
+    const lvlName = () => LV[Math.min(LV.length - 1, st.wing)];
+    function bite() {
+      if (st.boom || st.chew > 0.15) return; st.pressB = 0.12;
+      st.bites++; st.chew = 0.45; st.pend += 9 + st.wing * 4.5; st.score += 10 * (st.wing + 1); env.score(st.score);
+      FUN.tone(240, 0.06, 'square', 0.05); FUN.tone(200, 0.06, 'square', 0.05, null, 0.12);
+      if (st.bites >= 4) {
+        const bonus = 100 * (st.wing + 1); st.score += bonus; env.score(st.score); fl.add(`${lvlName()} done! +${bonus}`, 200, 380, C.yellow);
+        st.wing++; st.bites = 0; st.milk = Math.min(3, st.milk + 2); st.time = Math.max(5.5, 8 - st.wing * 0.2);
+        say(pick(['Next wing! Bring it!', 'That was nothing!', 'Is that all you got?', 'My tongue is fine. Totally fine.']));
+      }
+    }
+    function drink() {
+      if (st.boom || st.milk <= 0) return; st.pressM = 0.12; st.milk--; st.heat = Math.max(0, st.heat - 32); st.pend *= 0.5; st.gulp = 0.6;
+      FUN.tone(500, 0.2, 'sine', 0.06, 300); say(pick(['Ahhh, milk.', 'Glug glug glug.', 'Sweet relief!']), 1.6);
+    }
+    say('Hot sauce challenge? Easy. I eat spicy food for breakfast.');
+    return {
+      down(x, y) { FUN.audio(); if (inBox(x, y, bBite)) bite(); else if (inBox(x, y, bMilk)) drink(); },
+      key(code, down) { if (!down) return; if (code === 'Space' || code === 'KeyB' || code === 'ArrowLeft') bite(); if (code === 'KeyM' || code === 'ArrowRight') drink(); },
+      update(dt) {
+        st.t += dt; fl.step(dt); st.bT -= dt; if (st.bT <= 0) st.bubble = null; st.chew = Math.max(0, st.chew - dt); st.pressB = Math.max(0, st.pressB - dt); st.pressM = Math.max(0, st.pressM - dt); st.gulp = Math.max(0, st.gulp - dt);
+        if (st.boom) { st.overT -= dt; if (st.overT <= 0 && !st.ended) { st.ended = true; env.over(st.score); } st.steam.forEach((s) => { s.t += dt; s.y -= 160 * dt; }); return; }
+        const tr = Math.min(st.pend, (22 + st.wing * 2) * dt); st.pend -= tr; st.heat += tr;
+        st.heat = Math.max(0, st.heat - (st.pend > 1 ? 1 : 6) * dt);
+        st.time -= dt;
+        if (st.time <= 0) { st.boom = true; st.overT = 2.4; say('Too slow! The crowd says: CHICKEN!', 1.4); FUN.tone(200, 0.4, 'sawtooth', 0.07, 100); return; }
+        if (st.heat >= 100) {
+          st.boom = true; st.overT = 2.6; say('MY FACE IS ON FIIIRE!', 2); FUN.tone(90, 0.9, 'sawtooth', 0.12, 40);
+          for (let i = 0; i < 30; i++) st.steam.push({ x: 200 + rand(-90, 90), y: 220 + rand(-60, 60), t: 0, r: rand(10, 26) }); return;
+        }
+        if (st.heat > 60 && Math.random() < dt * 12) st.steam.push({ x: 200 + (Math.random() < 0.5 ? -88 : 88), y: 215, t: 0, r: rand(6, 12) });
+        if (st.heat > 40 && Math.random() < dt * 4) st.sweat.push({ x: 200 + rand(-70, 70), y: 170 + rand(0, 40), t: 0 });
+        st.steam.forEach((s) => { s.t += dt; s.y -= 80 * dt; s.x += (s.x < 200 ? -20 : 20) * dt; }); st.steam = st.steam.filter((s) => s.t < 1.2);
+        st.sweat.forEach((s) => { s.t += dt; s.y += 90 * dt; }); st.sweat = st.sweat.filter((s) => s.t < 1);
+        st.lastLine -= dt;
+        if (st.lastLine <= 0 && !st.bubble) {
+          const h = st.heat; const line = h > 88 ? 'I CAN SEE SOUNDS!' : h > 75 ? 'MY TONGUE IS ON FIRE!' : h > 55 ? 'Is it hot in here or is it me?' : h > 35 ? 'Okay, a little spicy.' : null;
+          if (line) { say(line, 1.6 + h / 100); st.lastLine = 3; }
+        }
+      },
+      draw(c) {
+        const hk = Math.min(1, st.heat / 100);
+        const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, `rgb(255,${Math.round(230 - hk * 120)},${Math.round(190 - hk * 150)})`); g.addColorStop(1, `rgb(255,${Math.round(180 - hk * 120)},${Math.round(120 - hk * 100)})`); c.fillStyle = g; c.fillRect(0, 0, W, H);
+        c.fillStyle = 'rgba(255,255,255,.18)'; for (let i = 0; i < 6; i++) c.fillRect(i * 70 + 10, 0, 30, 400);
+        // banner
+        c.fillStyle = C.red; rr(c, 60, 12, 280, 46, 12); c.fill(); c.lineWidth = 3; c.strokeStyle = C.ink; c.stroke();
+        c.fillStyle = '#fff'; c.font = funFont(19); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(`🔥 Wing ${st.wing + 1}: ${lvlName()}`, 200, 35);
+        // Shreyas
+        const shake = hk > 0.6 ? (hk - 0.6) * 10 : 0, sx = 200 + rand(-shake, shake), sy = 230 + rand(-shake, shake);
+        drawShreyas(c, sx, sy, 84, { mood: st.boom ? 'shock' : hk > 0.7 ? 'shock' : hk > 0.4 ? 'sad' : 'grin', mouth: st.chew > 0 ? 0.2 + 0.6 * Math.abs(Math.sin(st.t * 22)) : st.gulp > 0 ? 0.8 : null });
+        c.fillStyle = `rgba(230,30,20,${hk * 0.5})`; c.beginPath(); c.moveTo(sx - 70, sy - 10); c.bezierCurveTo(sx - 74, sy + 50, sx - 50, sy + 97, sx, sy + 97); c.bezierCurveTo(sx + 50, sy + 97, sx + 74, sy + 50, sx + 70, sy - 10); c.closePath(); c.fill();
+        if (st.boom) { c.fillStyle = 'rgba(255,140,0,.85)'; for (let i = 0; i < 8; i++) { c.beginPath(); c.moveTo(sx - 18, sy + 64); c.lineTo(sx - 60 + i * 15 + rand(-8, 8), H - 120 + rand(-30, 30)); c.lineTo(sx + 18, sy + 64); c.closePath(); c.fill(); } c.fillStyle = 'rgba(255,230,80,.9)'; c.beginPath(); c.moveTo(sx - 10, sy + 64); c.lineTo(sx + rand(-20, 20), H - 160); c.lineTo(sx + 10, sy + 64); c.fill(); }
+        for (const s of st.steam) { c.fillStyle = `rgba(255,255,255,${0.7 * (1 - s.t / 1.2)})`; c.beginPath(); c.arc(s.x, s.y, s.r * (1 + s.t), 0, TAU); c.fill(); }
+        c.fillStyle = '#7fd0ff'; for (const s of st.sweat) { ell(c, s.x, s.y, 4, 6); c.fill(); }
+        // heat meter
+        c.fillStyle = 'rgba(0,0,0,.25)'; rr(c, 30, 360, 340, 26, 13); c.fill();
+        const mg = c.createLinearGradient(30, 0, 370, 0); mg.addColorStop(0, '#ffd23f'); mg.addColorStop(0.6, '#ff7a2c'); mg.addColorStop(1, '#e2201b'); c.fillStyle = mg; rr(c, 30, 360, 340 * hk, 26, 13); c.fill();
+        c.fillStyle = 'rgba(255,255,255,.5)'; rr(c, 30 + 340 * hk, 360, 340 * Math.min(1 - hk, st.pend / 100), 26, 13); c.fill();
+        c.strokeStyle = C.ink; c.lineWidth = 3; rr(c, 30, 360, 340, 26, 13); c.stroke();
+        c.fillStyle = C.ink; c.font = funFont(13); c.fillText(`HEAT ${Math.round(st.heat)}  ·  still burning: +${Math.round(st.pend)}`, 200, 400);
+        // wing + timer
+        c.fillStyle = '#fff'; ell(c, 200, 455, 110, 26); c.fill(); c.strokeStyle = C.ink; c.lineWidth = 3; c.stroke();
+        for (let i = 0; i < 4 - st.bites; i++) { c.fillStyle = '#c4501f'; ell(c, 140 + i * 40, 450, 18, 11); c.fill(); c.fillStyle = '#e8d3b0'; ell(c, 155 + i * 40, 446, 6, 4); c.fill(); }
+        c.fillStyle = 'rgba(0,0,0,.2)'; rr(c, 100, 486, 200, 10, 5); c.fill(); c.fillStyle = st.time < 3 ? C.red : C.green; rr(c, 100, 486, 200 * Math.max(0, st.time) / 8, 10, 5); c.fill();
+        funButton(c, bBite.x, bBite.y, bBite.w, bBite.h, `🍗 BITE (${st.bites}/4)`, { fill: C.yellow, size: 18, pressed: st.pressB > 0 });
+        funButton(c, bMilk.x, bMilk.y, bMilk.w, bMilk.h, `🥛 MILK ×${st.milk}`, { fill: st.milk ? '#fff' : '#ddd', size: 18, pressed: st.pressM > 0 });
+        bigText(c, fmt(st.score), 345, 90, 26, C.yellow);
+        if (st.bubble) speechBubble(c, 230, 130, st.bubble, { size: 15, maxW: 260 });
+        fl.draw(c);
+        if (st.boom) bigText(c, st.heat >= 100 ? 'KABOOM!' : 'CHICKEN!', 200, 330, 52, '#ff6b5e');
+      },
+      _dbg: { st, bite, drink }
+    };
+  }
+});
+
 const HORROR = {
   id: 'horror', name: 'Shreyas Horror', tag: 'Escape his house in five days. 3D. Not for the faint of heart.', badge: 'Scary', link: HORROR_URL,
   thumb(c, w, h) {
@@ -4871,6 +5728,14 @@ function localNameForm(container, id, score, after) {
 /* ======================= FEEDBACK + UPDATE LOG ======================= */
 // Newest first. Add an entry here every time an update is pushed.
 const UPDATES = [
+  { id: '2026-10-20a', date: 'Oct 20, 2026', title: 'Boss fight + vs Shreyas games', items: [
+    'NEW: ⚔️ vs Shreyas tab for games where you play against him.',
+    'Shreyas: Final Boss. Giant Shreyas with 3 phases: egg barrages, homework rain, laser glasses, gel rings, hair-spike spirals and a body slam. Dodge and shoot!',
+    'Air Hockey vs Shreyas: first to 7. He trash talks and gets faster when he’s losing.',
+    'Penalty Shootout vs Shreyas: shoot past him in goal, then dive to save his kicks. Sudden death if it’s tied.',
+    'Dance Battle vs Shreyas: he dances first, then you copy his moves on the beat. 3 rounds.',
+    'NEW funny games: Where Are My Glasses? (steer a half-blind Shreyas, avoid the LEGO), Mom’s Coming! (game until 9 PM, but switch to homework before Mom opens the door) and Hot Sauce Challenge (don’t let his face explode).'
+  ] },
   { id: '2026-10-14h', date: 'Oct 14, 2026', title: '5 funny games', items: [
     'NEW: 😂 Funny tab with five silly new games!',
     'Talking Shreyas: talk and he repeats you in a squeaky voice (allow the microphone). Call him on the phone, feed him eggs, mess up his hair, knock off his glasses, hand him homework, or make him dance.',
@@ -5066,14 +5931,14 @@ let curEnv = null;
 let cur = null, inst = null, running = false, scoreNow = 0, last = 0;
 function drawThumb(cv, g) { const c = cv.getContext('2d'); const w = cv.width / 2, h = cv.height / 2; c.save(); c.scale(2, 2); g.thumb(c, w, h); c.restore(); }
 var CATS = [
-  { id: 'all', name: 'All' }, { id: 'fav', name: '★ Favorites' }, { id: 'online', name: '🌐 Online', ids: ['ottt', 'oc4', 'orps'] }, { id: 'funny', name: '😂 Funny', ids: ['talking', 'family', 'sneak', 'fling', 'excuse'] },
+  { id: 'all', name: 'All' }, { id: 'fav', name: '★ Favorites' }, { id: 'online', name: '🌐 Online', ids: ['ottt', 'oc4', 'orps'] }, { id: 'funny', name: '😂 Funny', ids: ['talking', 'family', 'sneak', 'fling', 'excuse', 'glasses', 'momcoming', 'hotsauce'] }, { id: 'versus', name: '⚔️ vs Shreyas', ids: ['boss', 'hockey', 'penalty', 'dancebattle', 'pong'] },
   { id: 'action', name: 'Action', ids: ['egg', 'flappy', 'run', 'whack', 'snake', 'catch', 'space', 'jump', 'breakout', 'dodge', 'hop', 'adventure', 'survivors', 'racer'] },
   { id: 'brain', name: 'Brain', ids: ['2048', 'memory', 'math', 'simon', 'sweeper', 'merge', 'crush'] },
   { id: 'sports', name: 'Sports & chill', ids: ['hoops', 'pong', 'stack', 'reaction', 'fishing', 'bowling', 'golf'] },
   { id: 'strategy', name: 'Strategy & idle', ids: ['clicker', 'td'] },
   { id: 'scary', name: 'Scary', ids: ['horror'] }
 ];
-var NEW_IDS = ['talking', 'family', 'sneak', 'fling', 'excuse'];
+var NEW_IDS = ['boss', 'hockey', 'penalty', 'dancebattle', 'glasses', 'momcoming', 'hotsauce'];
 var hubCat = store.get('hubCat', 'all'), hubQuery = '', favs = new Set(store.get('favs', [])), hubBuilt = false;
 function dailyGame() { const d = new Date(); const key = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); let h = key; h = ((h ^ 61) ^ (h >>> 16)) * 9; h = h ^ (h >>> 4); h = h * 0x27d4eb2d; h = h ^ (h >>> 15); return GAMES[Math.abs(h) % GAMES.length]; }
 function allCards() { return [...GAMES, HORROR]; }
