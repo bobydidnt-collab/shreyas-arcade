@@ -4,6 +4,26 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="Shreyas Arcade: free browser games starring Shreyas, with accounts and leaderboards.">
+<script>
+/* Moving hosts: carry this browser's saves (best scores, clicker, favorites...) to the new site. */
+(function () {
+  var NEW_HOME = '';
+  var P = 'shreyasArcade.';
+  try {
+    var h = location.hash;
+    if (h.indexOf('#migrate=') === 0) {
+      var data = JSON.parse(decodeURIComponent(escape(atob(h.slice(9)))));
+      for (var k in data) if (k.indexOf(P) === 0 && localStorage.getItem(k) === null) localStorage.setItem(k, data[k]);
+      history.replaceState(null, '', location.pathname + location.search);
+    }
+  } catch (e) {}
+  if (NEW_HOME && /github\.io$/.test(location.hostname)) {
+    var d = {}, s = '';
+    try { for (var i = 0; i < localStorage.length; i++) { var key = localStorage.key(i); if (key.indexOf(P) === 0) d[key] = localStorage.getItem(key); } s = btoa(unescape(encodeURIComponent(JSON.stringify(d)))); } catch (e) {}
+    location.replace(NEW_HOME + (s && s.length < 60000 ? '#migrate=' + s : ''));
+  }
+})();
+</script>
 <title>Shreyas Arcade</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Rubik:wght@400;600;800&display=swap">
