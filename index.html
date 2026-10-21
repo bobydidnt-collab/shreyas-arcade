@@ -23,6 +23,54 @@
   if (NEW_HOME && window.top === window && /(github\.io|vercel\.app)$/.test(location.hostname)) location.replace(NEW_HOME);
 })();
 </script>
+<script>
+/* Google Sites gives its embed a throwaway address, so anything the page saves there (your login,
+   best scores, theme) is lost on every reload. Fix: run the arcade inside a frame from a fixed
+   address (a CDN copy of this same page), where saving works. If none of those addresses load
+   (blocked network), keep running here like before. */
+(function () {
+  var STABLE = ['raw.githack.com', 'cdn.statically.io', 'shreyas-arcade.vercel.app', 'bobydidnt-collab.github.io'];
+  var inFrame = window.parent !== window;
+  // Child side: tell the page that opened us that we loaded fine.
+  if (inFrame && STABLE.indexOf(location.hostname) >= 0) {
+    window.addEventListener('load', function () { try { window.parent.postMessage({ sa: 'ready' }, '*'); } catch (e) {} });
+  }
+  // Parent side: only on the Google Sites embed (the loader defines __SA_EMBED).
+  var tryIt = window.__SA_EMBED && STABLE.indexOf(location.hostname) < 0 && !/[?&]noframe/.test(location.search);
+  if (!tryIt) { window.__saFramed = Promise.resolve(false); return; }
+  var URLS = [
+    'https://raw.githack.com/bobydidnt-collab/shreyas-arcade/main/index.html',
+    'https://cdn.statically.io/gh/bobydidnt-collab/shreyas-arcade/main/index.html'
+  ];
+  window.__saFramed = new Promise(function (resolve) {
+    function attempt(i) {
+      if (i >= URLS.length) { resolve(false); return; }
+      var f = document.createElement('iframe'), done = false;
+      f.id = 'saStable'; f.src = URLS[i];
+      f.setAttribute('allow', 'fullscreen; autoplay; gamepad; microphone'); f.allowFullscreen = true;
+      f.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:0;z-index:200000;background:#14121d;visibility:hidden';
+      function onMsg(e) {
+        if (e.source !== f.contentWindow || !e.data || e.data.sa !== 'ready' || done) return;
+        done = true; clearTimeout(t); window.removeEventListener('message', onMsg);
+        f.style.visibility = 'visible'; document.documentElement.classList.add('sa-stable');
+        try { f.contentWindow.focus(); } catch (err) {}
+        resolve(true);
+      }
+      var t = setTimeout(function () { if (done) return; done = true; window.removeEventListener('message', onMsg); f.remove(); attempt(i + 1); }, 6000);
+      window.addEventListener('message', onMsg);
+      (document.body || document.documentElement).appendChild(f);
+    }
+    if (document.body) attempt(0); else document.addEventListener('DOMContentLoaded', function () { attempt(0); });
+  });
+})();
+</script>
+<style>html.sa-stable body > *:not(#saStable) { display: none !important; } html.sa-stable, html.sa-stable body { overflow: hidden; }</style>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+</head>
+<body>
 <title>Shreyas Arcade</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Rubik:wght@400;600;800&display=swap">
@@ -236,12 +284,6 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--blue); outline-
 @media (prefers-reduced-motion: reduce) { .card, .card:hover { transition: none; transform: none; } }
 body.framed > *:not(#saFrame) { display: none !important; }
 </style>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="firebase-config.js"></script>
-</head>
-<body>
 
 <main id="hub">
   <header class="masthead">
@@ -6762,6 +6804,8 @@ function boardHTML(id, highlight) {
 }
 function modeText() {
   if (!FB.on) return 'Online leaderboards aren’t set up yet, so scores are saved on this device.';
+  let canSave = true; try { localStorage.setItem('shreyasArcade.t', '1'); localStorage.removeItem('shreyasArcade.t'); } catch (e) { canSave = false; }
+  if (!canSave) return (FB.user ? `Signed in as ${FB.username || 'player'}. ` : '') + 'This browser is blocking the site from saving, so you’ll need to log in again after a refresh.';
   return FB.user ? `Signed in as ${FB.username || 'player'}. Your best score in each game is saved to your account.` : 'Make a free account to save your scores and get on the leaderboards.';
 }
 function refreshBoards() {
@@ -6928,7 +6972,7 @@ function localNameForm(container, id, score, after) {
 }
 
 /* ---------- start Firebase ---------- */
-(function initFirebase() {
+function initFirebase() {
   const cfg = window.FIREBASE_CONFIG;
   if (!cfg || !cfg.apiKey || !window.firebase) { refreshBoards(); return; }
   try { firebase.initializeApp(cfg); FB.auth = firebase.auth(); FB.fs = firebase.firestore(); FB.on = true; }
@@ -6951,13 +6995,17 @@ function localNameForm(container, id, score, after) {
     }, (e) => console.warn('leaderboard', g.id, e && e.code));
   });
   refreshBoards();
-})();
+}
+// On Google Sites the arcade may move into a frame with a fixed address (see _frame.html); only start Firebase in the copy that is actually used.
+(window.__saFramed || Promise.resolve(false)).then((framed) => { if (!framed) initFirebase(); });
 
 /* ======================= FEEDBACK + UPDATE LOG ======================= */
 // Newest first. Add an entry here every time an update is pushed.
 const UPDATES = [
-  { id: '2026-10-21a', date: 'Oct 21, 2026', title: 'Login bug fixed', items: [
-    'Leaving Shreyas Horror no longer logs you out. It now opens on top of the arcade, so going back is instant and you stay signed in.'
+  { id: '2026-10-21b', date: 'Oct 21, 2026', title: 'You stay logged in now', items: [
+    'Fixed: refreshing the page or leaving a game no longer logs you out.',
+    'Your best scores, favorites and light/dark choice should stick around between visits now too.',
+    'Shreyas Horror opens on top of the arcade, so going back is instant.'
   ] },
   { id: '2026-10-20f', date: 'Oct 20, 2026', title: 'Popular game remixes + smoother horror', items: [
     'NEW: 🎮 Popular remixes tab!',
@@ -7249,7 +7297,7 @@ function buildHub() {
     allCards().forEach((g) => {
       const wrap = document.createElement('div'); wrap.className = 'cardwrap'; wrap.id = 'cw-' + g.id;
       const el = document.createElement(g.link ? 'a' : 'button'); el.className = 'card' + (g.link ? ' horror' : '');
-      if (g.link) { el.href = g.link; el.target = '_blank'; el.rel = 'noopener'; el.addEventListener('click', (e) => { if (window.__SA_EMBED) { e.preventDefault(); openInFrame(g.link); } }); }
+      if (g.link) { el.href = g.link; el.target = '_blank'; el.rel = 'noopener'; el.addEventListener('click', (e) => { if (window.__SA_EMBED || window.parent !== window) { e.preventDefault(); openInFrame(g.link); } }); }
       el.innerHTML = `<canvas width="480" height="320"></canvas><span class="badge">${g.badge}</span>${NEW_IDS.includes(g.id) ? '<span class="badge new">New</span>' : ''}${g.id === today.id ? '<span class="badge today">🎯 Today</span>' : ''}<span class="meta"><h2>${g.name}</h2><span class="tag">${g.tag}</span>${g.link ? '<span class="best">Opens in a new tab</span>' : '<span class="best"></span><span class="champ"></span>'}</span>`;
       if (!g.link) el.onclick = () => openGame(g);
       const fav = document.createElement('button'); fav.className = 'fav'; fav.type = 'button'; fav.setAttribute('aria-label', 'Favorite ' + g.name);
@@ -7332,7 +7380,7 @@ async function openInFrame(path) {
     f.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:0;z-index:100000;background:#000';
     f.srcdoc = html; document.body.appendChild(f); document.body.classList.add('framed');
     f.onload = () => { try { f.contentWindow.focus(); } catch (e) {} };
-  } catch (e) { if (window.__SA_EMBED) window.__SA_EMBED.open(path); }
+  } catch (e) { if (window.__SA_EMBED) window.__SA_EMBED.open(path); else window.open(path, '_blank'); }
 }
 window.__saFrame = { open: openInFrame, close: closeFrame };
 function closeGame() { if (inst && inst.destroy) inst.destroy(); inst = null; cur = null; running = false; $('view').hidden = true; $('hub').hidden = false; buildHub(); }
