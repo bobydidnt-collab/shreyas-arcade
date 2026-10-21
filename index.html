@@ -234,6 +234,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--blue); outline-
 }
 #view, #game { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 @media (prefers-reduced-motion: reduce) { .card, .card:hover { transition: none; transform: none; } }
+body.framed > *:not(#saFrame) { display: none !important; }
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
@@ -6955,6 +6956,9 @@ function localNameForm(container, id, score, after) {
 /* ======================= FEEDBACK + UPDATE LOG ======================= */
 // Newest first. Add an entry here every time an update is pushed.
 const UPDATES = [
+  { id: '2026-10-21a', date: 'Oct 21, 2026', title: 'Login bug fixed', items: [
+    'Leaving Shreyas Horror no longer logs you out. It now opens on top of the arcade, so going back is instant and you stay signed in.'
+  ] },
   { id: '2026-10-20f', date: 'Oct 20, 2026', title: 'Popular game remixes + smoother horror', items: [
     'NEW: 🎮 Popular remixes tab!',
     'Shreyas Obby: a Roblox-style obstacle course with 25 stages, kill bricks, moving and vanishing blocks, jump pads and checkpoints.',
@@ -7245,7 +7249,7 @@ function buildHub() {
     allCards().forEach((g) => {
       const wrap = document.createElement('div'); wrap.className = 'cardwrap'; wrap.id = 'cw-' + g.id;
       const el = document.createElement(g.link ? 'a' : 'button'); el.className = 'card' + (g.link ? ' horror' : '');
-      if (g.link) { el.href = g.link; el.target = '_blank'; el.rel = 'noopener'; el.addEventListener('click', (e) => { if (window.__SA_EMBED) { e.preventDefault(); window.__SA_EMBED.open(g.link); } }); }
+      if (g.link) { el.href = g.link; el.target = '_blank'; el.rel = 'noopener'; el.addEventListener('click', (e) => { if (window.__SA_EMBED) { e.preventDefault(); openInFrame(g.link); } }); }
       el.innerHTML = `<canvas width="480" height="320"></canvas><span class="badge">${g.badge}</span>${NEW_IDS.includes(g.id) ? '<span class="badge new">New</span>' : ''}${g.id === today.id ? '<span class="badge today">🎯 Today</span>' : ''}<span class="meta"><h2>${g.name}</h2><span class="tag">${g.tag}</span>${g.link ? '<span class="best">Opens in a new tab</span>' : '<span class="best"></span><span class="champ"></span>'}</span>`;
       if (!g.link) el.onclick = () => openGame(g);
       const fav = document.createElement('button'); fav.className = 'fav'; fav.type = 'button'; fav.setAttribute('aria-label', 'Favorite ' + g.name);
@@ -7312,6 +7316,25 @@ function openGame(g) {
   else { running = false; overlay(`<h3>${g.name}</h3><p>${g.howto}</p><button class="btn go big" id="startBtn">Play</button>`); $('startBtn').onclick = begin; $('startBtn').focus(); }
   window.scrollTo(0, 0);
 }
+// On the Google Site, other pages (like Shreyas Horror) open in a frame on top of the arcade,
+// so the arcade page (and your login) stays alive instead of being reloaded.
+function closeFrame() { const f = document.getElementById('saFrame'); if (f) f.remove(); document.body.classList.remove('framed'); buildHub(); }
+async function openInFrame(path) {
+  try {
+    const base = document.baseURI.replace(/[^/]*$/, '');
+    const r = await fetch(base + path, { cache: 'no-cache' }); if (!r.ok) throw new Error(r.status);
+    let html = await r.text(); if (html.indexOf('<html') < 0) throw new Error('not html');
+    const back = '<button onclick="parent.__saFrame.close()" style="position:fixed;top:10px;left:10px;z-index:99999;font:700 15px system-ui;padding:8px 14px;border-radius:10px;border:2px solid #000;background:#f5c22e;color:#1d1b2e;cursor:pointer">← Arcade</button>';
+    const shim = '<base href="' + base + '"><script>window.__SA_EMBED={open:function(p){if(p===\'index.html\')parent.__saFrame.close();else parent.__saFrame.open(p);}};<\/script>';
+    html = html.replace(/<head>/i, () => '<head>' + shim).replace(/<body([^>]*)>/i, (m) => m + back);
+    closeFrame();
+    const f = document.createElement('iframe'); f.id = 'saFrame'; f.setAttribute('allow', 'fullscreen; autoplay; gamepad'); f.allowFullscreen = true;
+    f.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:0;z-index:100000;background:#000';
+    f.srcdoc = html; document.body.appendChild(f); document.body.classList.add('framed');
+    f.onload = () => { try { f.contentWindow.focus(); } catch (e) {} };
+  } catch (e) { if (window.__SA_EMBED) window.__SA_EMBED.open(path); }
+}
+window.__saFrame = { open: openInFrame, close: closeFrame };
 function closeGame() { if (inst && inst.destroy) inst.destroy(); inst = null; cur = null; running = false; $('view').hidden = true; $('hub').hidden = false; buildHub(); }
 $('backBtn').onclick = closeGame;
 $('restartBtn').onclick = () => { if (!cur) return; if (cur.id === 'clicker' || cur.online) return; startInstance(); begin(); };
