@@ -6874,9 +6874,9 @@ function openAuth(mode, pend, after) {
   $('authPending').hidden = !pending;
   if (pending) $('authPending').textContent = `Your score of ${fmt(pending.score)} will be saved as soon as you're in.`;
   $('authModal').hidden = false;
-  setTimeout(() => $('authUser').focus(), 30);
+  setTimeout(() => { try { $('authUser').focus({ preventScroll: true }); } catch (e) { $('authUser').focus(); } }, 30);
 }
-function closeAuth() { $('authModal').hidden = true; $('authPass').value = ''; $('authPass2').value = ''; }
+function closeAuth() { $('authModal').hidden = true; $('authPass').value = ''; $('authPass2').value = ''; if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); showTopBar(); }
 $('tabLogin').onclick = () => setAuthMode('login');
 $('tabSignup').onclick = () => setAuthMode('signup');
 $('authCancel').onclick = () => { closeAuth(); pending = null; };
@@ -7002,6 +7002,9 @@ function initFirebase() {
 /* ======================= FEEDBACK + UPDATE LOG ======================= */
 // Newest first. Add an entry here every time an update is pushed.
 const UPDATES = [
+  { id: '2026-10-27a', date: 'Oct 27, 2026', title: 'Back button fix', items: [
+    'Fixed: after logging in during a game, the ← Games button could disappear off the top of the screen. Now a ← Games button always stays where you can see it.'
+  ] },
   { id: '2026-10-21b', date: 'Oct 21, 2026', title: 'You stay logged in now', items: [
     'Fixed: refreshing the page or leaving a game no longer logs you out.',
     'Your best scores, favorites and light/dark choice should stick around between visits now too.',
@@ -7362,7 +7365,7 @@ function openGame(g) {
   startInstance();
   if (g.noOverlay) begin();
   else { running = false; overlay(`<h3>${g.name}</h3><p>${g.howto}</p><button class="btn go big" id="startBtn">Play</button>`); $('startBtn').onclick = begin; $('startBtn').focus(); }
-  window.scrollTo(0, 0);
+  showTopBar();
 }
 // On the Google Site, other pages (like Shreyas Horror) open in a frame on top of the arcade,
 // so the arcade page (and your login) stays alive instead of being reloaded.
@@ -7383,7 +7386,29 @@ async function openInFrame(path) {
   } catch (e) { if (window.__SA_EMBED) window.__SA_EMBED.open(path); else window.open(path, '_blank'); }
 }
 window.__saFrame = { open: openInFrame, close: closeFrame };
-function closeGame() { if (inst && inst.destroy) inst.destroy(); inst = null; cur = null; running = false; $('view').hidden = true; $('hub').hidden = false; buildHub(); }
+// On the Google Site the arcade sits inside frames. Typing in a box can scroll the Google Sites page
+// down, which pushes the top bar (← Games) off screen; this scrolls every frame back so it's visible.
+function showTopBar() {
+  const el = !$('view').hidden ? $('view').querySelector('.bar') : $('hub');
+  window.scrollTo(0, 0);
+  if (window.parent !== window && el) { try { el.scrollIntoView({ block: 'start', inline: 'nearest' }); } catch (e) {} }
+}
+// If the Google Sites page around the arcade is scrolled, the top bar (and ← Games) can end up above the
+// screen. Watch how much of the game view is actually on screen and pin a spare back button to the visible top.
+const floatBack = document.createElement('button');
+floatBack.className = 'btn'; floatBack.id = 'floatBack'; floatBack.hidden = true; floatBack.textContent = '← Games';
+floatBack.style.cssText = 'position:fixed;left:10px;z-index:60;box-shadow:3px 3px 0 var(--shadow)';
+floatBack.onclick = () => closeGame();
+document.body.appendChild(floatBack);
+if (window.IntersectionObserver) {
+  const th = []; for (let i = 0; i <= 50; i++) th.push(i / 50);
+  new IntersectionObserver((es) => {
+    const e = es[es.length - 1], cut = e.intersectionRect.top - e.boundingClientRect.top;
+    const show = !$('view').hidden && e.isIntersecting && cut > 20;
+    floatBack.hidden = !show; if (show) floatBack.style.top = Math.round(cut + 8) + 'px';
+  }, { threshold: th }).observe($('view'));
+}
+function closeGame() { if (inst && inst.destroy) inst.destroy(); inst = null; cur = null; running = false; $('view').hidden = true; $('hub').hidden = false; buildHub(); floatBack.hidden = true; showTopBar(); }
 $('backBtn').onclick = closeGame;
 $('restartBtn').onclick = () => { if (!cur) return; if (cur.id === 'clicker' || cur.online) return; startInstance(); begin(); };
 
